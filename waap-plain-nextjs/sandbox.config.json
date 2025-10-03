@@ -1,0 +1,7 @@
+{
+    "template": "next",
+    "container": {
+      "node": "20",
+      "port": 3000
+    }
+  }
