@@ -1,6 +1,6 @@
 # WaaP Example: Plain + Next.js
 
-A clean example of integrating WaaP with Next.js using the `@human.tech/waap-sdk` with just `window.silk` withount any other adapters.
+A clean example of integrating WaaP with Next.js using the `@human.tech/waap-sdk` with just `window.waap` withount any other adapters.
 
 ```bash
 npx gitpick holonym-foundation/waap-examples/tree/main/waap-plain-nextjs
@@ -106,7 +106,7 @@ function MyComponent() {
     if (!window.waap || !address) return
 
     try {
-      const signature = await window.silk.request({
+      const signature = await window.waap.request({
         method: 'personal_sign',
         params: ['Hello Human!', address]
       })
@@ -146,10 +146,10 @@ function SendTransaction() {
   const { isConnected, address } = useWaaP()
 
   const handleSendTransaction = async () => {
-    if (!window.silk || !address) return
+    if (!window.waap || !address) return
 
     try {
-      const txHash = await window.silk.request({
+      const txHash = await window.waap.request({
         method: 'eth_sendTransaction',
         params: [{
           from: address,
@@ -178,11 +178,11 @@ function RequestEmail() {
   const { isConnected } = useWaaP()
 
   const handleRequestEmail = async () => {
-    if (!window.silk) return
+    if (!window.waap) return
 
     try {
       // Access WaaP specific methods
-      const email = await window.silk.requestEmail()
+      const email = await window.waap.requestEmail()
       console.log('Email:', email)
     } catch (error) {
       console.error('Failed to request email:', error)
