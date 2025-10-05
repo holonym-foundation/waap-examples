@@ -36,7 +36,7 @@ export default function SendTransaction() {
       console.log('Recipient:', recipientAddress)
       console.log('Amount: 0.000001 ETH')
       
-      const hash = await window.silk?.request({
+      const hash = await window.waap?.request({
         method: 'eth_sendTransaction',
         params: [
           {

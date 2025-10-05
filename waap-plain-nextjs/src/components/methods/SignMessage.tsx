@@ -32,7 +32,7 @@ export default function SignMessage() {
 
     setIsPending(true)
     try {
-      const signature = await window.silk?.request({
+      const signature = await window.waap?.request({
         method: 'personal_sign',
         params: [message, address]
       })

@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@silk-wallet/silk-wallet-sdk':
-        specifier: ^0.7.4
-        version: 0.7.4(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)
+        specifier: ^1.0.0
+        version: 1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)
       framer-motion:
         specifier: ^12.4.10
         version: 12.23.22(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -549,16 +549,16 @@ packages:
   '@scure/bip39@1.6.0':
     resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
 
-  '@silk-wallet/silk-constants@0.3.4':
-    resolution: {integrity: sha512-vhhN+rAq7hSNTJTvR+Oo9wsxjkTapofVLiIyODiAq//QzRa0HMfRnT+WBlFl+9xlHkpkjWvIL2DSRJGANm9pbA==}
+  '@silk-wallet/silk-constants@0.3.7':
+    resolution: {integrity: sha512-+VaHjcwVk2hVWqzKf/BRlkB8zqgiZSVzFGATHkjRLPrM58xwaK/knbZ5wpqxcPotx4yfqcxx5OiLFxlLOOrfyQ==}
     engines: {node: '>=18.0.0'}
 
   '@silk-wallet/silk-interface-core@0.4.4':
     resolution: {integrity: sha512-63kO0AOXOnMaKjN4jUT+9T30qE9DqBBE30nA4hreeSfTEVB1wBdWuhIN26BWUF3zeERY39BI9XdgDCz9CQUfBQ==}
     engines: {node: '>=18.0.0'}
 
-  '@silk-wallet/silk-wallet-sdk@0.7.4':
-    resolution: {integrity: sha512-s7AHTidZXKoCiQGd12/oiR/1KwI/Yk+5B9/BQBg8VnYFomSf/tt6+ru/Hn3MZZQ8Na+EmjN2EVqi/0qLwMHuOQ==}
+  '@silk-wallet/silk-wallet-sdk@1.0.0':
+    resolution: {integrity: sha512-nPYyMRPGrSVk5BQWVrn5NqsrFpf3wqY57Vzf4OE9Ylh072TevhrJQJSPzrNj9nIIygDHE/OUhIN54bSCPu4Yfw==}
     engines: {node: '>=18.0.0'}
 
   '@swc/counter@0.1.3':
@@ -3560,18 +3560,18 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 
-  '@silk-wallet/silk-constants@0.3.4':
+  '@silk-wallet/silk-constants@0.3.7':
     dependencies:
       '@silk-wallet/silk-interface-core': 0.4.4
 
   '@silk-wallet/silk-interface-core@0.4.4': {}
 
-  '@silk-wallet/silk-wallet-sdk@0.7.4(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)':
+  '@silk-wallet/silk-wallet-sdk@1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)':
     dependencies:
       '@metamask/rpc-errors': 5.1.1
       '@reown/appkit': 1.8.7(@types/react@19.1.15)(react@19.1.1)(typescript@5.9.2)(zod@3.25.76)
       '@reown/appkit-adapter-ethers': 1.8.7(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)(zod@3.25.76)
-      '@silk-wallet/silk-constants': 0.3.4
+      '@silk-wallet/silk-constants': 0.3.7
       '@silk-wallet/silk-interface-core': 0.4.4
       events: 3.3.0
       pino-pretty: 10.3.1

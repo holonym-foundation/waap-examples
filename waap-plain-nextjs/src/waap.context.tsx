@@ -2,12 +2,12 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { useToast } from '@/hooks/useToast'
-import { CredentialType, SilkEthereumProviderInterface as WaaPEthereumProviderInterface, initSilk as initWaaP } from '@silk-wallet/silk-wallet-sdk'
+import { CredentialType, WaaPEthereumProviderInterface, initWaaP } from '@silk-wallet/silk-wallet-sdk'
 import { WaaPConfig } from '@/waap.config'
 
 declare global {
   interface Window {
-    silk?: WaaPEthereumProviderInterface
+    waap?: WaaPEthereumProviderInterface
   }
 }
 
@@ -47,16 +47,16 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
   useEffect(() => {
     const initializeWaaP = async () => {
       try {
-        // Check if window.silk is already available (extension installed)
-        if (typeof window !== 'undefined' && window.silk) {
+        // Check if window.waap is already available (extension installed)
+        if (typeof window !== 'undefined' && window.waap) {
           setIsInitialized(true)
           
           // Check if already connected
           try {
-            const accounts = await window.silk.request({
+            const accounts = await window.waap.request({
               method: 'eth_requestAccounts'
             }) as string[]
-            const currentChainId = await window.silk.request({
+            const currentChainId = await window.waap.request({
               method: 'eth_chainId'
             }) as string
 
@@ -82,17 +82,17 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
             setChainId(undefined)
           }
         } else {
-          // window.silk is undefined, initialize with initWaaP
+          // window.waap is undefined, initialize with initWaaP
           
           // Add timeout to prevent hanging
           const initTimeout = setTimeout(() => {
-            console.warn('Silk wallet initialization timed out')
+            console.warn('WaaP initialization timed out')
             setIsInitialized(true)
             notify('warn', 'WaaP initialization timed out. Some features may be limited.')
           }, 15000) // 15 second timeout
           
           try {
-            const silk = initWaaP(WaaPConfig)
+            const waap = initWaaP(WaaPConfig)
             
             // Clear timeout if successful
             clearTimeout(initTimeout)
@@ -122,7 +122,7 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
 
   // Set up event listeners
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.silk) {
+    if (typeof window !== 'undefined' && window.waap) {
       const handleAccountsChanged = (accounts: unknown) => {
         const accountList = accounts as string[]
         // Check for valid accounts (not empty array and not array with empty strings)
@@ -147,14 +147,14 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
         setChainId(undefined)
       }
 
-      window.silk.on('accountsChanged', handleAccountsChanged)
-      window.silk.on('chainChanged', handleChainChanged)
-      window.silk.on('disconnect', handleDisconnect)
+      window.waap.on('accountsChanged', handleAccountsChanged)
+      window.waap.on('chainChanged', handleChainChanged)
+      window.waap.on('disconnect', handleDisconnect)
 
       return () => {
-        window.silk?.removeListener('accountsChanged', handleAccountsChanged)
-        window.silk?.removeListener('chainChanged', handleChainChanged)
-        window.silk?.removeListener('disconnect', handleDisconnect)
+        window.waap?.removeListener('accountsChanged', handleAccountsChanged)
+        window.waap?.removeListener('chainChanged', handleChainChanged)
+        window.waap?.removeListener('disconnect', handleDisconnect)
       }
     }
   }, [])
@@ -165,14 +165,14 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       return
     }
 
-    if (typeof window === 'undefined' || !window.silk) {
+    if (typeof window === 'undefined' || !window.waap) {
       notify('error', 'WaaP not available. Please install the WaaP extension or check your internet connection.')
       return
     }
 
     setIsConnecting(true)
     try {
-      await window.silk.login()
+      await window.waap.login()
       // context states will be updated via the event listeners
     } catch (error) {
       console.error('Connection failed:', error)
@@ -191,13 +191,13 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       return
     }
 
-    if (typeof window === 'undefined' || !window.silk) {
+    if (typeof window === 'undefined' || !window.waap) {
       return
     }
 
     setIsDisconnecting(true)
     try {
-      await window.silk.logout()
+      await window.waap.logout()
       // context states will be updated via the event listeners
     } catch (error) {
       console.error('Disconnection failed:', error)
@@ -218,13 +218,13 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       return
     }
 
-    if (typeof window === 'undefined' || !window.silk) {
+    if (typeof window === 'undefined' || !window.waap) {
       notify('error', 'WaaP not available')
       return
     }
 
     try {
-      await window.silk.request({
+      await window.waap.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }]
       })
@@ -244,13 +244,13 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       return
     }
 
-    if (typeof window === 'undefined' || !window.silk) {
+    if (typeof window === 'undefined' || !window.waap) {
       notify('error', 'WaaP not available')
       return
     }
 
     try {
-      const hash = await window.silk.request({
+      const hash = await window.waap.request({
         method: 'eth_sendTransaction',
         params: [transaction]
       })
@@ -268,13 +268,13 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       return
     }
 
-    if (typeof window === 'undefined' || !window.silk) {
+    if (typeof window === 'undefined' || !window.waap) {
       notify('error', 'WaaP not available')
       return
     }
 
     try {
-      const signature = await window.silk.request({
+      const signature = await window.waap.request({
         method: 'personal_sign',
         params: [message, address]
       })

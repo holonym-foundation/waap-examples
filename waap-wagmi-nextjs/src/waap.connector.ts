@@ -3,11 +3,9 @@ import { getAddress, SwitchChainError, UserRejectedRequestError } from "viem";
 
 import {
   type CredentialType,
-  SILK_METHOD as WAAP_METHOD,
-} from "@silk-wallet/silk-wallet-sdk";
-import {
-  type SilkEthereumProviderInterface as WaaPEthereumProviderInterface,
-  initSilk as initWaaP,
+  type WaaPEthereumProviderInterface,
+  WAAP_METHOD,
+  initWaaP,
 } from "@silk-wallet/silk-wallet-sdk";
 import type { InitSilkOptions as InitWaaPOptions } from "@silk-wallet/silk-wallet-sdk";
 
@@ -20,7 +18,7 @@ export type LoginResponse = 'human' | 'injected' | 'walletconnect' | null;
  */
 export interface WaaPConnector extends Connector {
   // WaaP-specific properties
-  isSilk: boolean
+  isWaaP: boolean
   connected: boolean
   
   // Authentication methods

@@ -17,7 +17,7 @@ export function SwitchChain() {
   const handleChainChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedChainId = parseInt(event.target.value)
     if (selectedChainId && selectedChainId !== chainId) {
-      window.silk?.request({
+      window.waap?.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${selectedChainId.toString(16)}` }]
       })

@@ -27,7 +27,7 @@ export default function RequestEmail() {
     setIsPending(true)
     try {
       // Call requestEmail
-      const result = await window.silk?.requestEmail()
+      const result = await window.waap?.requestEmail()
       setOutput(JSON.stringify(result, null, 2))
       notify('success', '[requestEmail] successful!')
     } catch (error) {

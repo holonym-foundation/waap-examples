@@ -1,8 +1,7 @@
-import { InitSilkOptions as InitWaaPOptions } from "@silk-wallet/silk-wallet-sdk";
+import { InitWaaPOptions } from "@silk-wallet/silk-wallet-sdk";
 
 export const WaaPConfig: InitWaaPOptions = {
-  useStaging: true,
-  // useProd: true,
+  useStaging: false, // Set to false for production
   config: {
     allowedSocials: ["google", "twitter", "discord", "github"],
     // as we are using wagmi, we don't need to add wallet to the authentication methods
