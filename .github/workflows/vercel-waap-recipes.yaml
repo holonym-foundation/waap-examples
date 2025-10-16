@@ -1,0 +1,101 @@
+name: Deploy WaaP Recipes to Vercel
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WAAP_RECIPES_PROJECT_ID }}
+
+on: 
+  push:
+    paths: [
+      '.github/workflows/vercel-waap-recipes.yaml',
+      'waap-recipes/**',
+    ]
+jobs:
+  Deploy-Preview:
+    permissions: write-all # Best to make this more granular later
+    
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      # Setup pnpm cache
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v3
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('waap-recipes/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+      
+      - name: Install Dependencies
+        shell: bash
+        working-directory: waap-recipes
+        run: pnpm install
+
+      - name: Install Vercel CLI
+        run: pnpm add --global vercel@latest
+
+      - name: Pull Preview Environment From Vercel
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Next App
+        working-directory: waap-recipes
+        run: pnpm build
+
+      - name: Build Project Artifacts
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+
+  Deploy-Production:
+    runs-on: ubuntu-latest
+    environment: Production
+    # if: github.ref_name == 'main'
+    needs: Deploy-Preview
+    steps:    
+      - uses: actions/checkout@v3
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      # Setup pnpm cache
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v3
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('waap-recipes/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+      
+      - name: Install Dependencies
+        shell: bash
+        working-directory: waap-recipes
+        run: pnpm install
+
+      - name: Install Vercel CLI
+        run: pnpm add --global vercel@latest
+
+      - name: Pull Production Environment From Vercel
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Next App
+        working-directory: waap-recipes
+        run: pnpm build
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Production
+        run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}      
