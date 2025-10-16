@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      '@silk-wallet/silk-wallet-sdk':
+      '@human.tech/waap-sdk':
         specifier: ^1.0.0
         version: 1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)
       '@tanstack/react-query':
@@ -204,6 +204,10 @@ packages:
     resolution: {integrity: sha512-vv9aozWnKrrPWQ3vIFcWk7yta4hQW1Ie0fsNNPeXnjAxkbXr2hqMagEptLuMxpEP2W3mnRu05VDNKzcvAuuZDw==}
     peerDependencies:
       viem: '>=2.0.0'
+
+  '@human.tech/waap-sdk@1.0.0':
+    resolution: {integrity: sha512-zdZDdUaMX+L3zqcXojCgJ0wGzbefDk+ph7KvKKu7fw/84Bd5f+rPUXiXpAl6Ogf3+Yt3Il3OTVfn9pjY8DpyMw==}
+    engines: {node: '>=18.0.0'}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -721,10 +725,6 @@ packages:
 
   '@silk-wallet/silk-interface-core@0.4.4':
     resolution: {integrity: sha512-63kO0AOXOnMaKjN4jUT+9T30qE9DqBBE30nA4hreeSfTEVB1wBdWuhIN26BWUF3zeERY39BI9XdgDCz9CQUfBQ==}
-    engines: {node: '>=18.0.0'}
-
-  '@silk-wallet/silk-wallet-sdk@1.0.0':
-    resolution: {integrity: sha512-nPYyMRPGrSVk5BQWVrn5NqsrFpf3wqY57Vzf4OE9Ylh072TevhrJQJSPzrNj9nIIygDHE/OUhIN54bSCPu4Yfw==}
     engines: {node: '>=18.0.0'}
 
   '@socket.io/component-emitter@3.1.2':
@@ -3622,6 +3622,47 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@human.tech/waap-sdk@1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@metamask/rpc-errors': 5.1.1
+      '@reown/appkit': 1.8.4(@types/react@19.1.12)(bufferutil@4.0.9)(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76)
+      '@reown/appkit-adapter-ethers': 1.8.4(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76)
+      '@silk-wallet/silk-constants': 0.3.7
+      '@silk-wallet/silk-interface-core': 0.4.4
+      events: 3.3.0
+      pino-pretty: 10.3.1
+      zod: 3.25.76
+      zod-validation-error: 1.5.0(zod@3.25.76)
+    transitivePeerDependencies:
+      - '@azure/app-configuration'
+      - '@azure/cosmos'
+      - '@azure/data-tables'
+      - '@azure/identity'
+      - '@azure/keyvault-secrets'
+      - '@azure/storage-blob'
+      - '@capacitor/preferences'
+      - '@deno/kv'
+      - '@ethersproject/sha2'
+      - '@netlify/blobs'
+      - '@planetscale/database'
+      - '@react-native-async-storage/async-storage'
+      - '@types/react'
+      - '@upstash/redis'
+      - '@vercel/blob'
+      - '@vercel/functions'
+      - '@vercel/kv'
+      - aws4fetch
+      - bufferutil
+      - db0
+      - encoding
+      - ethers
+      - ioredis
+      - react
+      - supports-color
+      - typescript
+      - uploadthing
+      - utf-8-validate
+
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.7':
@@ -4720,47 +4761,6 @@ snapshots:
       '@silk-wallet/silk-interface-core': 0.4.4
 
   '@silk-wallet/silk-interface-core@0.4.4': {}
-
-  '@silk-wallet/silk-wallet-sdk@1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)':
-    dependencies:
-      '@metamask/rpc-errors': 5.1.1
-      '@reown/appkit': 1.8.4(@types/react@19.1.12)(bufferutil@4.0.9)(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76)
-      '@reown/appkit-adapter-ethers': 1.8.4(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76)
-      '@silk-wallet/silk-constants': 0.3.7
-      '@silk-wallet/silk-interface-core': 0.4.4
-      events: 3.3.0
-      pino-pretty: 10.3.1
-      zod: 3.25.76
-      zod-validation-error: 1.5.0(zod@3.25.76)
-    transitivePeerDependencies:
-      - '@azure/app-configuration'
-      - '@azure/cosmos'
-      - '@azure/data-tables'
-      - '@azure/identity'
-      - '@azure/keyvault-secrets'
-      - '@azure/storage-blob'
-      - '@capacitor/preferences'
-      - '@deno/kv'
-      - '@ethersproject/sha2'
-      - '@netlify/blobs'
-      - '@planetscale/database'
-      - '@react-native-async-storage/async-storage'
-      - '@types/react'
-      - '@upstash/redis'
-      - '@vercel/blob'
-      - '@vercel/functions'
-      - '@vercel/kv'
-      - aws4fetch
-      - bufferutil
-      - db0
-      - encoding
-      - ethers
-      - ioredis
-      - react
-      - supports-color
-      - typescript
-      - uploadthing
-      - utf-8-validate
 
   '@socket.io/component-emitter@3.1.2': {}
 

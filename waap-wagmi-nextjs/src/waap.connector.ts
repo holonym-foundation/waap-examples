@@ -6,8 +6,8 @@ import {
   type WaaPEthereumProviderInterface,
   WAAP_METHOD,
   initWaaP,
-} from "@silk-wallet/silk-wallet-sdk";
-import type { InitSilkOptions as InitWaaPOptions } from "@silk-wallet/silk-wallet-sdk";
+} from "@human.tech/waap-sdk";
+import type { InitSilkOptions as InitWaaPOptions } from "@human.tech/waap-sdk";
 
 // Re-export LoginResponse type for convenience
 export type LoginResponse = 'human' | 'injected' | 'walletconnect' | null;

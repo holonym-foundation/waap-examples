@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { useToast } from '@/hooks/useToast'
-import { CredentialType, WaaPEthereumProviderInterface, initWaaP } from '@silk-wallet/silk-wallet-sdk'
+import { CredentialType, WaaPEthereumProviderInterface, initWaaP } from '@human.tech/waap-sdk'
 import { WaaPConfig } from '@/waap.config'
 
 declare global {

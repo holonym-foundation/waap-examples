@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useToast } from '@/hooks/useToast'
 import { BrowserProvider, JsonRpcSigner } from 'ethers'
-import { CredentialType, initWaaP, WAAP_METHOD, WaaPEthereumProviderInterface } from '@silk-wallet/silk-wallet-sdk'
+import { CredentialType, initWaaP, WAAP_METHOD, WaaPEthereumProviderInterface } from '@human.tech/waap-sdk'
 import { WaaPConfig } from '@/waap.config'
 
 /**
