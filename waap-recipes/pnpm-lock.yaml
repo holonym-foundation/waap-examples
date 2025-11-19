@@ -4,13 +4,16 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@silk-wallet/silk-constants': 0.3.7
+
 importers:
 
   .:
     dependencies:
       '@human.tech/waap-sdk':
-        specifier: ^1.0.0
-        version: 1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)
+        specifier: ^1.0.1
+        version: 1.0.1(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)
       '@tanstack/react-query':
         specifier: ^5.74.7
         version: 5.87.4(react@19.1.1)
@@ -208,8 +211,8 @@ packages:
     peerDependencies:
       viem: '>=2.0.0'
 
-  '@human.tech/waap-sdk@1.0.0':
-    resolution: {integrity: sha512-zdZDdUaMX+L3zqcXojCgJ0wGzbefDk+ph7KvKKu7fw/84Bd5f+rPUXiXpAl6Ogf3+Yt3Il3OTVfn9pjY8DpyMw==}
+  '@human.tech/waap-sdk@1.0.1':
+    resolution: {integrity: sha512-TOwTDWtcxvJWPB94nRANYTj5d0pTy9llS34MdlNBvfSSkcmS9fgNb/66Nu2kHG+4JRGdbSRYcv2sP52cGaWvWw==}
     engines: {node: '>=18.0.0'}
 
   '@humanfs/core@0.19.1':
@@ -1124,6 +1127,7 @@ packages:
 
   '@walletconnect/sign-client@2.21.7':
     resolution: {integrity: sha512-9k/JEl9copR6nXRhqnmzWz2Zk1hiWysH+o6bp6Cqo8TgDUrZoMLBZMZ6qbo+2HLI54V02kKf0Vg8M81nNFOpjQ==}
+    deprecated: 'Reliability and performance improvements. See: https://github.com/WalletConnect/walletconnect-monorepo/releases'
 
   '@walletconnect/time@1.0.2':
     resolution: {integrity: sha512-uzdd9woDcJ1AaBZRhqy5rNC9laqWGErfc4dxA9a87mPdKOgWMD85mcFo9dIYIts/Jwocfwn07EC6EzclKubk/g==}
@@ -1145,6 +1149,7 @@ packages:
 
   '@walletconnect/universal-provider@2.21.7':
     resolution: {integrity: sha512-8PB+vA5VuR9PBqt5Y0xj4JC2doYNPlXLGQt3wJORVF9QC227Mm/8R1CAKpmneeLrUH02LkSRwx+wnN/pPnDiQA==}
+    deprecated: 'Reliability and performance improvements. See: https://github.com/WalletConnect/walletconnect-monorepo/releases'
 
   '@walletconnect/utils@2.21.0':
     resolution: {integrity: sha512-zfHLiUoBrQ8rP57HTPXW7rQMnYxYI4gT9yTACxVW6LhIFROTF6/ytm5SKNoIvi4a5nX5dfXG4D9XwQUCu8Ilig==}
@@ -3630,7 +3635,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@human.tech/waap-sdk@1.0.0(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)':
+  '@human.tech/waap-sdk@1.0.1(@ethersproject/sha2@5.8.0)(@types/react@19.1.12)(bufferutil@4.0.9)(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)':
     dependencies:
       '@metamask/rpc-errors': 5.1.1
       '@reown/appkit': 1.8.4(@types/react@19.1.12)(bufferutil@4.0.9)(react@19.1.1)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76)
