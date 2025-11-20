@@ -4,16 +4,13 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@silk-wallet/silk-constants': 0.3.7
-
 importers:
 
   .:
     dependencies:
       '@human.tech/waap-sdk':
-        specifier: ^1.0.1
-        version: 1.0.1(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)
+        specifier: ^1.0.2
+        version: 1.0.2(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -172,8 +169,16 @@ packages:
   '@ethersproject/sha2@5.8.0':
     resolution: {integrity: sha512-dDOUrXr9wF/YFltgTBYS0tKslPEKr6AekjqDW2dbn1L1xmjGR+9GiKu4ajxovnrDbwxAKdHjW8jNcwfz8PAz4A==}
 
-  '@human.tech/waap-sdk@1.0.1':
-    resolution: {integrity: sha512-TOwTDWtcxvJWPB94nRANYTj5d0pTy9llS34MdlNBvfSSkcmS9fgNb/66Nu2kHG+4JRGdbSRYcv2sP52cGaWvWw==}
+  '@human.tech/waap-constants@0.0.1':
+    resolution: {integrity: sha512-OUFKip9A1TW0xQCiU2ohYVULjm9hFT93nTfMLA64zQs/RqVf4yJjRfJod+3lanmhq++TSDD/VbNUGDjB0Je0tQ==}
+    engines: {node: '>=18.0.0'}
+
+  '@human.tech/waap-interface-core@0.1.0':
+    resolution: {integrity: sha512-GBl0rbgjprC2tm7yiSusZQvtEGoefL3qlL41FlMUYUDMCCY0/0YSpLfr0Rl8/Dq1Qd1mK8CDbvboOlQEHBBv9g==}
+    engines: {node: '>=18.0.0'}
+
+  '@human.tech/waap-sdk@1.0.2':
+    resolution: {integrity: sha512-WC8T6iTuW1b2jAbUaBYL0FBSRe+J4CyrTMQMMzgRgatBT1V/doEGbynbrl47MEG7hcsCfNwDjzr8D/X1lfnOoA==}
     engines: {node: '>=18.0.0'}
 
   '@humanfs/core@0.19.1':
@@ -558,10 +563,6 @@ packages:
 
   '@scure/bip39@1.6.0':
     resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
-
-  '@silk-wallet/silk-constants@0.3.7':
-    resolution: {integrity: sha512-+VaHjcwVk2hVWqzKf/BRlkB8zqgiZSVzFGATHkjRLPrM58xwaK/knbZ5wpqxcPotx4yfqcxx5OiLFxlLOOrfyQ==}
-    engines: {node: '>=18.0.0'}
 
   '@silk-wallet/silk-interface-core@0.4.4':
     resolution: {integrity: sha512-63kO0AOXOnMaKjN4jUT+9T30qE9DqBBE30nA4hreeSfTEVB1wBdWuhIN26BWUF3zeERY39BI9XdgDCz9CQUfBQ==}
@@ -2952,13 +2953,19 @@ snapshots:
       '@ethersproject/logger': 5.8.0
       hash.js: 1.1.7
 
-  '@human.tech/waap-sdk@1.0.1(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)':
+  '@human.tech/waap-constants@0.0.1':
     dependencies:
+      '@silk-wallet/silk-interface-core': 0.4.4
+
+  '@human.tech/waap-interface-core@0.1.0': {}
+
+  '@human.tech/waap-sdk@1.0.2(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)':
+    dependencies:
+      '@human.tech/waap-constants': 0.0.1
+      '@human.tech/waap-interface-core': 0.1.0
       '@metamask/rpc-errors': 5.1.1
       '@reown/appkit': 1.8.7(@types/react@19.1.15)(react@19.1.1)(typescript@5.9.2)(zod@3.25.76)
       '@reown/appkit-adapter-ethers': 1.8.7(@ethersproject/sha2@5.8.0)(@types/react@19.1.15)(ethers@6.15.0)(react@19.1.1)(typescript@5.9.2)(zod@3.25.76)
-      '@silk-wallet/silk-constants': 0.3.7
-      '@silk-wallet/silk-interface-core': 0.4.4
       events: 3.3.0
       pino-pretty: 10.3.1
       zod: 3.25.76
@@ -3608,10 +3615,6 @@ snapshots:
     dependencies:
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
-
-  '@silk-wallet/silk-constants@0.3.7':
-    dependencies:
-      '@silk-wallet/silk-interface-core': 0.4.4
 
   '@silk-wallet/silk-interface-core@0.4.4': {}
 

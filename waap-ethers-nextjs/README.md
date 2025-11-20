@@ -66,7 +66,7 @@ The WaaP is configured in `src/waap.config.ts`:
 
 ```typescript
 export const WaaPConfig: InitWaaPOptions = {
-  useStaging: true, // Set to false for production
+  useStaging: false, // Set to false for production
   config: {
     allowedSocials: ["google", "twitter", "discord", "github"],
     authenticationMethods: ["email", "phone", "social"],
