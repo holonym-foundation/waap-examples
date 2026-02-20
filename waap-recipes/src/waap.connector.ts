@@ -66,6 +66,11 @@ export default function WaaPConnector(options?: InitWaaPOptions) {
           });
           const provider = await this.getProvider() as WaaPEthereumProviderInterface;
 
+          // Remove any existing listeners to prevent duplicates and MaxListenersExceededWarning
+          provider.removeListener("accountsChanged", this.onAccountsChanged);
+          provider.removeListener("chainChanged", this.onChainChanged);
+          provider.removeListener("disconnect", this.onDisconnect);
+
           provider.on("accountsChanged", this.onAccountsChanged);
           provider.on("chainChanged", this.onChainChanged);
           provider.on("disconnect", this.onDisconnect);

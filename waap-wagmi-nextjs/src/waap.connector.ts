@@ -7,7 +7,7 @@ import {
   WAAP_METHOD,
   initWaaP,
 } from "@human.tech/waap-sdk";
-import type { InitSilkOptions as InitWaaPOptions } from "@human.tech/waap-sdk";
+import type { InitWaaPOptions } from "@human.tech/waap-sdk";
 
 // Re-export LoginResponse type for convenience
 export type LoginResponse = 'human' | 'injected' | 'walletconnect' | null;

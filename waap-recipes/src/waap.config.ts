@@ -1,4 +1,4 @@
-import { InitSilkOptions as InitWaaPOptions } from "@human.tech/waap-sdk";
+import { InitWaaPOptions } from "@human.tech/waap-sdk";
 
 export const WaaPConfig: InitWaaPOptions = {
   useStaging: false, // Set to false for production
