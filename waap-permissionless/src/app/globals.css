@@ -1,0 +1,221 @@
+@import 'tailwindcss';
+
+/* https://tailwindcss.com/docs/theme#default-theme-variable-reference */
+
+/* Font Face Declarations */
+/* PP Hatton */
+@font-face {
+  font-family: 'PP Hatton';
+  src: url('/assets/fonts/PPHATTON-REGULAR.TTF') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'PP Hatton';
+  src: url('/assets/fonts/PPHATTON-MEDIUM.TTF') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'PP Hatton';
+  src: url('/assets/fonts/PPHATTON-SEMIBOLD.OTF') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Suisse Intl */
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-THIN.OTF') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-THINIT.OTF') format('opentype');
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-LIGHT.OTF') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-LIGHTIT.OTF') format('opentype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-REGULAR.OTF') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-REGULARIT.OTF') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOOK.OTF') format('opentype');
+  font-weight: 450;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOOKIT.OTF') format('opentype');
+  font-weight: 450;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-MEDIUM.OTF') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-MEDIUMIT.OTF') format('opentype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-SEMIBOLD.OTF') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-SEMIBOLDIT.OTF') format('opentype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOLD.OTF') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOLDIT.OTF') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BLACK.OTF') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BLACKIT.OTF') format('opentype');
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Hairline';
+  src: url('/assets/fonts/SUISSEINTL-HAIRLINE.OTF') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Hairline';
+  src: url('/assets/fonts/SUISSEINTL-HAIRLINEIT.OTF') format('opentype');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+
+@theme {
+  /* Color configuration */
+  --color-mint-500: oklch(0.72 0.11 178);
+  
+  /* Screen breakpoints */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+  
+  /* Font families */
+  --font-inter: 'Inter', sans-serif;
+  --font-sans: 'Suisse Intl', sans-serif;
+  --font-pp-hatton: 'PP Hatton', sans-serif;
+  --font-suisse: 'Suisse Intl', sans-serif;
+}
+
+body {
+  /* background: radial-gradient(50% 50% at 50% 50%, #f2e7d4 0%, #f2f2f2 100%); */
+  font-family: 'Suisse Intl', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'PP Hatton', sans-serif;
+}
+
+/* Tailwind v4 custom utility classes */
+@layer utilities {
+  .font-pp-hatton {
+    font-family: 'PP Hatton', sans-serif;
+  }
+  
+  .font-suisse {
+    font-family: 'Suisse Intl', sans-serif;
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
