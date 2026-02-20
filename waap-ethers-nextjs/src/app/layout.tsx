@@ -2,7 +2,7 @@
 
 import Header from '@/components/Header'
 import { Slide, ToastContainer } from 'react-toastify'
-import { WaaPProvider } from '@/waap.context'
+import Providers from '@/components/Providers'
 import './globals.css'
 
 export default function RootLayout({
@@ -14,10 +14,10 @@ export default function RootLayout({
     <html lang='en'>
       <body className={``}>
           <>
-          <WaaPProvider>
+          <Providers>
             <Header />
             {children}
-          </WaaPProvider>
+          </Providers>
           <ToastContainer transition={Slide} />
         </>
       </body>

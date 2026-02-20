@@ -203,21 +203,25 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       setChainId(Number(chainId))
     }
 
-    // Add listeners to the WaaPEthersProvider using WaaP-specific methods
-    provider.addWaaPEventListener('accountsChanged', (accounts) => {
+    const onAccountsChanged = (accounts: unknown) => {
       handleAccountsChanged(accounts as string[])
-    })
-    provider.addWaaPEventListener('chainChanged', (chainId) => {
+    }
+
+    const onChainChanged = (chainId: unknown) => {
       handleChainChanged(chainId as string)
-    })
+    }
+
+    // Proactively remove any existing listeners to prevent duplicates and MaxListenersExceededWarning
+    provider.removeWaaPEventListener('accountsChanged', onAccountsChanged)
+    provider.removeWaaPEventListener('chainChanged', onChainChanged)
+
+    // Add listeners to the WaaPEthersProvider using WaaP-specific methods
+    provider.addWaaPEventListener('accountsChanged', onAccountsChanged)
+    provider.addWaaPEventListener('chainChanged', onChainChanged)
 
     return () => {
-      provider.removeWaaPEventListener('accountsChanged', (accounts) => {
-        handleAccountsChanged(accounts as string[])
-      })
-      provider.removeWaaPEventListener('chainChanged', (chainId) => {
-        handleChainChanged(chainId as string)
-      })
+      provider.removeWaaPEventListener('accountsChanged', onAccountsChanged)
+      provider.removeWaaPEventListener('chainChanged', onChainChanged)
     }
   }, [provider])
 
