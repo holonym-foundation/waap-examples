@@ -26,7 +26,8 @@ export default function HomePage() {
     connect, 
     disconnect, 
     isConnecting,
-    isInitialized
+    isInitialized,
+    loginMethod
   } = useWaaP()
   
   const prevConnectedRef = useRef(isConnected)
@@ -130,7 +131,7 @@ export default function HomePage() {
 
                 <div className='flex items-center justify-between'>
                   <span className='text-gray-600'>Wallet:</span>
-                  <span className='text-sm'>WaaP</span>
+                  <span className='text-sm'>{loginMethod}</span>
                 </div>
 
                 {/* Disconnect */}

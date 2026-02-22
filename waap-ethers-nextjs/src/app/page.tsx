@@ -120,9 +120,7 @@ export default function HomePage() {
 
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Wallet:</span>
-                  <span className="text-sm capitalize">
-                    {loginMethod || "WaaP"}
-                  </span>
+                  <span className="text-sm">{loginMethod}</span>
                 </div>
 
                 {/* Disconnect */}

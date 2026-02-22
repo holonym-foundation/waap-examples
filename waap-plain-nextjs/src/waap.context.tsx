@@ -20,6 +20,7 @@ interface WaaPContextType {
   chainId?: number
   isConnecting: boolean
   isDisconnecting: boolean
+  loginMethod?: string
     
   // Additional methods
   connect: () => Promise<void>
@@ -41,6 +42,7 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
   const [chainId, setChainId] = useState<number | undefined>()
   const [isConnecting, setIsConnecting] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
+  const [loginMethod, setLoginMethod] = useState<string | undefined>()
   const notify = useToast()
 
   // Initialize WaaP
@@ -68,6 +70,7 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
               setAddress(accounts[0])
               setConnected(true)
               setChainId(Number(currentChainId))
+              setLoginMethod(window.waap.getLoginMethod() as string)
             } else {
               // Wallet is not connected
               setAddress(undefined)
@@ -131,6 +134,7 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
         if (hasValidAccounts) {
           setAddress(accountList[0])
           setConnected(true)
+          setLoginMethod(window.waap!.getLoginMethod() as string)
         } else {
           setAddress(undefined)
           setConnected(false)
@@ -172,7 +176,8 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
 
     setIsConnecting(true)
     try {
-      await window.waap.login()
+      const method = await window.waap.login()
+      setLoginMethod(method as string)
       // context states will be updated via the event listeners
     } catch (error) {
       console.error('Connection failed:', error)
@@ -206,6 +211,7 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
       setAddress(undefined)
       setConnected(false)
       setChainId(undefined)
+      setLoginMethod(undefined)
     } finally {
       setIsDisconnecting(false)
     }
@@ -294,6 +300,7 @@ export function WaaPProvider({ children }: WaaPProviderProps) {
     chainId,
     isConnecting,
     isDisconnecting,
+    loginMethod,
     
     // Additional methods
     connect,

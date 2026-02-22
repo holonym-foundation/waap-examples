@@ -7,10 +7,10 @@ import {
   WAAP_METHOD,
   initWaaP,
 } from "@human.tech/waap-sdk";
-import type { InitSilkOptions as InitWaaPOptions } from "@human.tech/waap-sdk";
+import type { InitWaaPOptions } from "@human.tech/waap-sdk";
 
 // Re-export LoginResponse type for convenience
-export type LoginResponse = 'human' | 'injected' | 'walletconnect' | null;
+export type LoginResponse = 'waap' | 'human' | 'injected' | 'walletconnect' | null;
 
 /**
  * Extended connector type that includes WaaP-specific methods
@@ -205,6 +205,21 @@ export default function WaaPConnector(options?: InitWaaPOptions) {
         provider.removeListener("accountsChanged", this.onAccountsChanged);
         provider.removeListener("chainChanged", this.onChainChanged);
         provider.removeListener("disconnect", this.onDisconnect);
+      },
+
+      getLoginMethod() {
+        if (!WaaPProvider) return null;
+        return WaaPProvider.getLoginMethod() as LoginResponse;
+      },
+
+      async login(customProvider?: unknown) {
+        const provider = await this.getProvider() as WaaPEthereumProviderInterface;
+        return provider.login(customProvider) as Promise<LoginResponse>;
+      },
+
+      async logout() {
+        const provider = await this.getProvider() as WaaPEthereumProviderInterface;
+        return provider.logout();
       },
 
       async requestEmail(): Promise<unknown> {

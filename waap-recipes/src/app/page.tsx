@@ -6,7 +6,8 @@ import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi'
 import { motion } from 'framer-motion'
 import { useIsMounted } from '@/hooks/useIsMounted'
 import { truncateAddress } from '@/utils'
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import type { WaaPConnector } from '@/waap.connector'
 import MotionButton from '@/components/MotionButton'
 
 import SignMessage from '@/components/methods/SignMessage'
@@ -19,9 +20,10 @@ export default function HomePage() {
   const { copyToClipboard } = useCopyToClipboard()
   const isMounted = useIsMounted()
 
-  const { address, isConnected, chainId } = useAccount()
+  const { address, isConnected, chainId, connector } = useAccount()
   const { connect, connectors, isPending, error, reset } = useConnect()
   const { disconnect } = useDisconnect()
+  const [loginMethod, setLoginMethod] = useState<string | null>(null)
   
   const prevConnectedRef = useRef(isConnected)
 
@@ -31,7 +33,14 @@ export default function HomePage() {
       notify('success', 'Wallet connected successfully!')
     }
     prevConnectedRef.current = isConnected
-  }, [isConnected, notify])
+
+    if (isConnected && connector?.id === 'waap') {
+      const waapConnector = connector as WaaPConnector
+      setLoginMethod(waapConnector.getLoginMethod())
+    } else if (!isConnected) {
+      setLoginMethod(null)
+    }
+  }, [isConnected, connector, notify])
 
   // Watch for connection errors
   useEffect(() => {
@@ -129,7 +138,7 @@ export default function HomePage() {
 
                 <div className='flex items-center justify-between'>
                   <span className='text-gray-600'>Wallet:</span>
-                  <span className='text-sm'>WaaP</span>
+                  <span className='text-sm'>{loginMethod}</span>
                 </div>
 
                 {/* Disconnect */}
