@@ -104,6 +104,9 @@ const STRATEGY: StrategyConfig = {
 	minSpreadBps: num('SPREAD_BPS', DEFAULT_STRATEGY.minSpreadBps),
 	maxSpreadBps: num('MAX_SPREAD_BPS', DEFAULT_STRATEGY.maxSpreadBps),
 	touchMultiple: num('TOUCH_MULTIPLE', DEFAULT_STRATEGY.touchMultiple),
+	holdOnLiquidityPause: flag('HOLD_ON_LIQUIDITY_PAUSE', DEFAULT_STRATEGY.holdOnLiquidityPause),
+	resumeMargin: num('LIQUIDITY_RESUME_MARGIN', DEFAULT_STRATEGY.resumeMargin),
+	minLiquidityPauseMs: num('LIQUIDITY_MIN_PAUSE_MIN', DEFAULT_STRATEGY.minLiquidityPauseMs / 60_000) * 60_000,
 	toleranceBps: num('REQUOTE_TOLERANCE_BPS', DEFAULT_STRATEGY.toleranceBps),
 	minDwellMs: num('MIN_DWELL_SEC', DEFAULT_STRATEGY.minDwellMs / 1000) * 1000,
 	orderTtlMs: num('ORDER_TTL_MIN', DEFAULT_STRATEGY.orderTtlMs / 60_000) * 60_000,
@@ -155,6 +158,8 @@ const PRICE_DIVISOR = (SCALARS.floatScalar * SCALARS.quoteScalar) / SCALARS.base
 let ctx: Context
 let runId: string
 let runStartMs = 0
+/** When the current liquidity pause began; carried between ticks, not persisted (a restart resumes on the plain rule). */
+let liquidityPausedSinceMs: number | undefined
 const fillLedger = new FillLedger()
 let bookParams: { tickSize: number; lotSize: number; minSize: number; verified: boolean } | undefined
 let fees: { makerFeeRate: number; verified: boolean } | undefined
@@ -448,9 +453,11 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 			resting: s.resting,
 			halt: haltReason,
 			pause,
+			liquidityPausedSinceMs,
 		},
 		STRATEGY,
 	)
+	liquidityPausedSinceMs = plan.liquidityPausedSinceMs
 	L('event', plan.mode === 'quote' ? 'quote_plan' : plan.mode === 'inventory_limited' ? 'inventory_limited' : 'quote_paused', {
 		tick: n,
 		mode: plan.mode,
@@ -464,6 +471,7 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 		place: plan.place,
 		sides: plan.sides,
 		recovery: plan.recovery ?? null,
+		liquidityPausedSinceMs: plan.liquidityPausedSinceMs ?? null,
 		gasConsumedSui: s.budget.gasConsumedMist / MIST_PER_SUI,
 		turnoverSui: rollingTurnover(s.budget, now(), LIMITS.turnoverWindowMs),
 	})

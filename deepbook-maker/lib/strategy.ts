@@ -28,6 +28,13 @@
  *     puts our quotes further from the touch than the liquidity rule allows, the maker
  *     pauses — it does not widen out of reach. The gate is re-checked on the final
  *     rounded prices.
+ *  7b. **Liquidity pause with hysteresis.** The liquidity rule decides where NEW quotes may
+ *     go; it is not a risk limit (an order further from the touch is less likely to be
+ *     hit, not more). So a pause caused only by the rule places nothing but keeps resting
+ *     orders that the keep rules in (9) would keep (`holdOnLiquidityPause`). Once paused,
+ *     placing resumes only after `minLiquidityPauseMs` AND when the spread fits inside the
+ *     rule by `resumeMargin`. Without this, a touch that flickers across the threshold
+ *     cancels and re-places both orders on every flip (12 of 15 sends in live run 2b).
  *  8. **One side only.** When only one side can be quoted, it is placed only if it
  *     moves `f` back toward target (a bid when short base, an ask when long). A one-sided
  *     order that adds risk is not placed.
@@ -50,6 +57,12 @@ export interface StrategyConfig {
 	maxSpreadBps: number
 	/** Our full spread may be at most this multiple of the touch spread (own orders excluded). */
 	touchMultiple: number
+	/** Keep resting orders (subject to the keep rules) through a pause caused only by the liquidity rule. */
+	holdOnLiquidityPause: boolean
+	/** Once paused on the liquidity rule, resume only when spread ≤ (1 − this) × the rule's limit. */
+	resumeMargin: number
+	/** Once paused on the liquidity rule, stay paused at least this long. */
+	minLiquidityPauseMs: number
 	toleranceBps: number
 	minDwellMs: number
 	orderTtlMs: number
@@ -71,6 +84,9 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
 	minSpreadBps: 20,
 	maxSpreadBps: 400,
 	touchMultiple: 4,
+	holdOnLiquidityPause: true,
+	resumeMargin: 0.25,
+	minLiquidityPauseMs: 10 * 60_000,
 	toleranceBps: 50,
 	minDwellMs: 5 * 60_000,
 	orderTtlMs: 60 * 60_000,
@@ -99,6 +115,8 @@ export interface StrategyInput {
 	resting: TrackedOrder[]
 	halt?: string
 	pause?: string
+	/** When the current liquidity pause began (from the previous plan's `liquidityPausedSinceMs`). */
+	liquidityPausedSinceMs?: number
 }
 
 export type Mode = 'quote' | 'pause' | 'halt' | 'inventory_limited'
@@ -125,6 +143,8 @@ export interface StrategyPlan {
 	gate?: GateResult & { requiredSpreadBps: number; touchSpreadBps: number }
 	/** For `inventory_limited`: what would make a side quotable again. */
 	recovery?: string
+	/** Liquidity-pause state for the caller to pass back next tick; undefined once quoting resumes. */
+	liquidityPausedSinceMs?: number
 }
 
 const EPS = 1e-9
@@ -162,7 +182,8 @@ export function askBandCap(B: number, V: number, mid: number, price: number, low
 
 export function planStrategy(input: StrategyInput, cfg: StrategyConfig = DEFAULT_STRATEGY): StrategyPlan {
 	const { book, params, nowMs, resting } = input
-	const stop = (mode: Mode, reason: string, extra: Partial<StrategyPlan> = {}): StrategyPlan => ({ mode, reason, cancels: cancelAll(resting), place: [], sides: [], ...extra })
+	// Other stops neither start nor end a liquidity pause: its clock carries through them.
+	const stop = (mode: Mode, reason: string, extra: Partial<StrategyPlan> = {}): StrategyPlan => ({ mode, reason, cancels: cancelAll(resting), place: [], sides: [], liquidityPausedSinceMs: input.liquidityPausedSinceMs, ...extra })
 
 	// (1) Stop conditions.
 	if (input.halt) return stop('halt', input.halt)
@@ -243,7 +264,6 @@ export function planStrategy(input: StrategyInput, cfg: StrategyConfig = DEFAULT
 	const gateAt = () => ({ ...cycleGate({ bid: prices.bid, ask: prices.ask, qty: q, mark: mid, makerFeeRate: feeRate, cost }), requiredSpreadBps: reqBps, touchSpreadBps: touchBps })
 	for (let i = 0; i < 6; i++) {
 		if (spreadBps > cfg.maxSpreadBps) return stop('pause', 'cost_infeasible', { ...base, spreadBps, gate: gateAt() })
-		if (spreadBps > cfg.touchMultiple * Math.max(touchBps, cfg.minSpreadBps)) return stop('pause', 'outside_liquidity_rule', { ...base, spreadBps, gate: gateAt() })
 		prices = pricesFor(spreadBps)
 		const s2 = sizesFor(prices)
 		// Sizes may only shrink as the spread widens.
@@ -264,6 +284,21 @@ export function planStrategy(input: StrategyInput, cfg: StrategyConfig = DEFAULT
 	}
 	const gate = gateAt()
 	if (!gate.pass) return stop('pause', 'cost_gate_failed_after_rounding', { ...base, spreadBps, gate })
+
+	// (7b) Liquidity rule, with hysteresis once paused.
+	const liqLimitBps = cfg.touchMultiple * Math.max(touchBps, cfg.minSpreadBps)
+	const since = input.liquidityPausedSinceMs
+	const liquidityBlock =
+		spreadBps > liqLimitBps + EPS
+			? 'outside_liquidity_rule'
+			: since === undefined
+				? undefined
+				: spreadBps > (1 - cfg.resumeMargin) * liqLimitBps + EPS
+					? 'liquidity_resume_margin'
+					: nowMs - since < cfg.minLiquidityPauseMs
+						? 'liquidity_min_pause'
+						: undefined
+	if (liquidityBlock && !cfg.holdOnLiquidityPause) return stop('pause', liquidityBlock, { ...base, spreadBps, gate, liquidityPausedSinceMs: since ?? nowMs })
 
 	// (9) Keep, replace, cancel.
 	const cancels: string[] = []
@@ -301,13 +336,15 @@ export function planStrategy(input: StrategyInput, cfg: StrategyConfig = DEFAULT
 			sides.push({ side: side.name, target: side.target, qty: kept.quantity, cap: side.cap, backing: side.backing, action: 'keep', reason })
 			continue
 		}
-		if (side.ok) {
+		if (side.ok && !liquidityBlock) {
 			place.push({ isBid: side.isBid, price: side.target, quantity: side.qty })
 			sides.push({ side: side.name, target: side.target, qty: side.qty, cap: side.cap, backing: side.backing, action: 'place', reason })
 		} else {
-			sides.push({ side: side.name, target: side.target, qty: side.qty, cap: side.cap, backing: side.backing, action: 'none', reason: reason ?? (side.qty < params.minSize ? 'below_min_size' : 'adds_risk_one_sided') })
+			sides.push({ side: side.name, target: side.target, qty: side.qty, cap: side.cap, backing: side.backing, action: 'none', reason: reason ?? (liquidityBlock && side.ok ? liquidityBlock : side.qty < params.minSize ? 'below_min_size' : 'adds_risk_one_sided') })
 		}
 	}
+	// Held: what the keep rules keep stays; what they cancel is cancelled; nothing new is placed.
+	if (liquidityBlock) return { mode: 'pause', reason: liquidityBlock, cancels, place, sides, ...base, spreadBps, gate, liquidityPausedSinceMs: since ?? nowMs }
 	return { mode: 'quote', cancels, place, sides, ...base, spreadBps, gate }
 }
 

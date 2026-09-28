@@ -1,0 +1,554 @@
+{
+ "source": "waap-examples deepbook-maker live run 2b, 2026-09-28 14:51-15:56Z (logs/mvp-run-2b.jsonl in the recipe workspace): one entry per planned tick; touchBps is the logged gate.touchSpreadBps (own orders excluded); filledQty is the maker fill quantity detected before that tick planned.",
+ "start": {
+  "base": 68,
+  "quote": 2.55
+ },
+ "params": {
+  "tickSize": 1e-05,
+  "lotSize": 1,
+  "minSize": 10
+ },
+ "config": {
+  "ORDER_SIZE": 50,
+  "COST_QUANTILE": "median",
+  "COST_REPLACEMENTS_PER_CYCLE": 2
+ },
+ "liveRequoteSends": 15,
+ "ticks": [
+  {
+   "atMs": 0,
+   "mid": 0.01879,
+   "touchBps": 149.0154,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  },
+  {
+   "atMs": 84595,
+   "mid": 0.018735,
+   "touchBps": 112.0897,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 153319,
+   "mid": 0.018815,
+   "touchBps": 122.2429,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 1
+   },
+   "filledQty": {
+    "bid": 50
+   }
+  },
+  {
+   "atMs": 239973,
+   "mid": 0.01874,
+   "touchBps": 101.3874,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 309196,
+   "mid": 0.018770000000000002,
+   "touchBps": 21.3106,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 1,
+    "place": 1
+   }
+  },
+  {
+   "atMs": 392743,
+   "mid": 0.0188,
+   "touchBps": 74.4681,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 462258,
+   "mid": 0.018765,
+   "touchBps": 95.9233,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 530973,
+   "mid": 0.018795,
+   "touchBps": 15.9617,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 1,
+    "place": 0
+   },
+   "filledQty": {
+    "ask": 50
+   }
+  },
+  {
+   "atMs": 614511,
+   "mid": 0.018834999999999998,
+   "touchBps": 100.876,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  },
+  {
+   "atMs": 696465,
+   "mid": 0.018785000000000003,
+   "touchBps": 154.3785,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 764934,
+   "mid": 0.018795,
+   "touchBps": 21.2823,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 2,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 845885,
+   "mid": 0.01883,
+   "touchBps": 21.2427,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 914349,
+   "mid": 0.01884,
+   "touchBps": 21.2314,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 982197,
+   "mid": 0.01884,
+   "touchBps": 21.2314,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1050876,
+   "mid": 0.01884,
+   "touchBps": 21.2314,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1119878,
+   "mid": 0.018715,
+   "touchBps": 229.7622,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  },
+  {
+   "atMs": 1202266,
+   "mid": 0.018770000000000002,
+   "touchBps": 143.8466,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1270557,
+   "mid": 0.01885,
+   "touchBps": 21.2202,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 2,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1358433,
+   "mid": 0.01883,
+   "touchBps": 21.2427,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1426423,
+   "mid": 0.01885,
+   "touchBps": 21.2202,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1494982,
+   "mid": 0.018860000000000002,
+   "touchBps": 21.2089,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1562590,
+   "mid": 0.018785,
+   "touchBps": 303.4336,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  },
+  {
+   "atMs": 1648726,
+   "mid": 0.01885,
+   "touchBps": 21.2202,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 2,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1731233,
+   "mid": 0.01879,
+   "touchBps": 21.2879,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1799220,
+   "mid": 0.01879,
+   "touchBps": 21.2879,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 1866876,
+   "mid": 0.018815,
+   "touchBps": 90.3534,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  },
+  {
+   "atMs": 1950395,
+   "mid": 0.018825,
+   "touchBps": 58.4329,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2018648,
+   "mid": 0.018865,
+   "touchBps": 143.1222,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2086576,
+   "mid": 0.018799999999999997,
+   "touchBps": 58.5106,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2154034,
+   "mid": 0.018875,
+   "touchBps": 143.0464,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2221670,
+   "mid": 0.01885,
+   "touchBps": 95.4907,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2289982,
+   "mid": 0.018835,
+   "touchBps": 58.4019,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2357626,
+   "mid": 0.018904999999999998,
+   "touchBps": 201.005,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2425626,
+   "mid": 0.018860000000000002,
+   "touchBps": 21.2089,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 2,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2510240,
+   "mid": 0.018860000000000002,
+   "touchBps": 21.2089,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2578094,
+   "mid": 0.01881,
+   "touchBps": 21.2653,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2646372,
+   "mid": 0.0188,
+   "touchBps": 21.2766,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2714231,
+   "mid": 0.01879,
+   "touchBps": 21.2879,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2784495,
+   "mid": 0.0188,
+   "touchBps": 191.4894,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  },
+  {
+   "atMs": 2869063,
+   "mid": 0.018845,
+   "touchBps": 185.7257,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 2936696,
+   "mid": 0.018779999999999998,
+   "touchBps": 58.5729,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3004172,
+   "mid": 0.01879,
+   "touchBps": 21.2879,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 2,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3091020,
+   "mid": 0.01881,
+   "touchBps": 21.2653,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3385893,
+   "mid": 0.01882,
+   "touchBps": 21.254,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3528808,
+   "mid": 0.01882,
+   "touchBps": 21.254,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3596441,
+   "mid": 0.01881,
+   "touchBps": 21.2653,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3664614,
+   "mid": 0.01881,
+   "touchBps": 21.2653,
+   "logged": {
+    "mode": "pause",
+    "reason": "outside_liquidity_rule",
+    "cancels": 0,
+    "place": 0
+   }
+  },
+  {
+   "atMs": 3732815,
+   "mid": 0.01876,
+   "touchBps": 53.3049,
+   "logged": {
+    "mode": "quote",
+    "reason": null,
+    "cancels": 0,
+    "place": 2
+   }
+  }
+ ]
+}

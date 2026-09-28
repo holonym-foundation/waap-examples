@@ -4,6 +4,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { askBandCap, bidBandCap, DEFAULT_STRATEGY, planStrategy, type StrategyConfig, type StrategyInput } from './strategy.ts'
 import { cycleCost, cycleGate, DEFAULT_CYCLE, requiredSpreadBps, SHAPE_COSTS } from './costs.ts'
@@ -282,4 +283,115 @@ test('review #5: when widening drops the ask of a long-base book, the lone bid i
 		}
 	}
 	assert.ok(checked > 0)
+})
+
+// --- liquidity pause: hold and hysteresis ----------------------------------------------
+
+const bookAt = (touchBps: number) => ({ bestBid: MID * (1 - touchBps / 2e4), bestAsk: MID * (1 + touchBps / 2e4), readAtMs: 1_000_000 })
+const INV = { free: { base: 50, quote: 0.955 }, locked: { base: 0, quote: 0 } }
+/** The orders a quoting tick on a wide book would place, as resting orders placed at `placedAtMs`. */
+function quotedOrders(placedAtMs = 999_000): { spreadBps: number; orders: TrackedOrder[] } {
+	const p = planStrategy(input({ book: bookAt(300), inv: INV }), DEFAULT_STRATEGY)
+	assert.equal(p.mode, 'quote', JSON.stringify(p))
+	const orders = p.place.map((o, i) => resting({ orderId: `Q${i}`, isBid: o.isBid, price: o.price, quantity: o.quantity, placedAtMs, expiresAtMs: placedAtMs + 3_600_000 }))
+	return { spreadBps: p.spreadBps!, orders }
+}
+const lockOf = (orders: TrackedOrder[]) => ({
+	free: { base: INV.free.base - orders.filter((o) => !o.isBid).reduce((s, o) => s + o.quantity, 0), quote: INV.free.quote - orders.filter((o) => o.isBid).reduce((s, o) => s + o.quantity * o.price, 0) },
+	locked: { base: orders.filter((o) => !o.isBid).reduce((s, o) => s + o.quantity, 0), quote: orders.filter((o) => o.isBid).reduce((s, o) => s + o.quantity * o.price, 0) },
+})
+
+test('liquidity pause holds resting orders the keep rules keep, places nothing, and starts its clock', () => {
+	const { orders } = quotedOrders()
+	const p = planStrategy(input({ book: bookAt(2), inv: lockOf(orders), resting: orders }), DEFAULT_STRATEGY)
+	assert.equal(p.mode, 'pause')
+	assert.equal(p.reason, 'outside_liquidity_rule')
+	assert.deepEqual(p.cancels, [])
+	assert.deepEqual(p.place, [])
+	assert.equal(p.liquidityPausedSinceMs, 1_000_000)
+	assert.ok(p.sides.every((s) => s.action === 'keep'))
+})
+
+test('liquidity pause still cancels an order the keep rules would cancel (risk), and does not replace it', () => {
+	const { orders } = quotedOrders()
+	const expiring = orders.map((o) => (o.isBid ? { ...o, expiresAtMs: 1_000_000 + 60_000 } : o))
+	const p = planStrategy(input({ book: bookAt(2), inv: lockOf(expiring), resting: expiring }), DEFAULT_STRATEGY)
+	assert.equal(p.mode, 'pause')
+	assert.deepEqual(p.cancels, [expiring.find((o) => o.isBid)!.orderId])
+	assert.deepEqual(p.place, [])
+})
+
+test('holdOnLiquidityPause=false restores cancel-all on a liquidity pause', () => {
+	const { orders } = quotedOrders()
+	const p = planStrategy(input({ book: bookAt(2), inv: lockOf(orders), resting: orders }), { ...DEFAULT_STRATEGY, holdOnLiquidityPause: false })
+	assert.equal(p.reason, 'outside_liquidity_rule')
+	assert.deepEqual(p.cancels.sort(), orders.map((o) => o.orderId).sort())
+})
+
+test('once paused, placing resumes only inside the rule by resumeMargin and after minLiquidityPauseMs', () => {
+	const { spreadBps: S } = quotedOrders()
+	// A touch whose 4× limit clears S but whose 75% resume limit does not.
+	const between = bookAt(S / DEFAULT_STRATEGY.touchMultiple / 0.875)
+	const wide = bookAt(300)
+	const long = 1_000_000 - DEFAULT_STRATEGY.minLiquidityPauseMs - 1
+	const recent = 1_000_000 - 60_000
+	// Never paused: the plain rule applies and it quotes.
+	assert.equal(planStrategy(input({ book: between, inv: INV }), DEFAULT_STRATEGY).mode, 'quote')
+	// Paused long ago, but inside the margin band: still paused, clock carried.
+	const m = planStrategy(input({ book: between, inv: INV, liquidityPausedSinceMs: long }), DEFAULT_STRATEGY)
+	assert.equal(m.reason, 'liquidity_resume_margin')
+	assert.deepEqual(m.place, [])
+	assert.equal(m.liquidityPausedSinceMs, long)
+	// Well inside the rule, but paused only a minute ago.
+	const r = planStrategy(input({ book: wide, inv: INV, liquidityPausedSinceMs: recent }), DEFAULT_STRATEGY)
+	assert.equal(r.reason, 'liquidity_min_pause')
+	assert.deepEqual(r.place, [])
+	// Both satisfied: quotes again and clears the pause.
+	const q = planStrategy(input({ book: wide, inv: INV, liquidityPausedSinceMs: long }), DEFAULT_STRATEGY)
+	assert.equal(q.mode, 'quote')
+	assert.equal(q.place.length, 2)
+	assert.equal(q.liquidityPausedSinceMs, undefined)
+})
+
+test('another stop during a liquidity pause carries the pause clock through', () => {
+	const p = planStrategy(input({ book: bookAt(300), inv: INV, pause: 'fills_backfilling', liquidityPausedSinceMs: 5 }), DEFAULT_STRATEGY)
+	assert.equal(p.reason, 'fills_backfilling')
+	assert.equal(p.liquidityPausedSinceMs, 5)
+})
+
+// Replay of live run 2b (28 Sep 2026): the logged touch series, mids, tick times and the two
+// real maker fills. With hysteresis off the replay must reproduce the live run tick for tick —
+// that is what makes the counterfactual count trustworthy. The counterfactual assumes no
+// further fills, as the live run saw none; a held order could have been hit.
+const RUN_2B = JSON.parse(readFileSync(new URL('./fixtures/run-2b-touch-series.json', import.meta.url), 'utf8'))
+const RUN_2B_CFG: StrategyConfig = { ...DEFAULT_STRATEGY, maxOrderSize: 50, cycle: { ...DEFAULT_CYCLE, quantile: 'median', replacementsPerCycle: 2 } }
+const replay2b = (cfg: StrategyConfig) =>
+	runScenario({
+		ticks: RUN_2B.ticks.map((t: any) => ({ mid: t.mid, halfTouchBps: t.touchBps / 2, atMs: t.atMs, fillQty: t.filledQty })),
+		start: RUN_2B.start,
+		params: RUN_2B.params,
+		cfg,
+	})
+
+test('run 2b replay: with hysteresis off, every tick matches the live log (15 sends)', () => {
+	const steps = replay2b({ ...RUN_2B_CFG, holdOnLiquidityPause: false, resumeMargin: 0, minLiquidityPauseMs: 0 })
+	steps.forEach((s, i) => {
+		const L = RUN_2B.ticks[i].logged
+		assert.deepEqual([s.plan.mode, s.plan.reason ?? null, s.plan.cancels.length, s.plan.place.length], [L.mode, L.reason, L.cancels, L.place], `tick ${i}`)
+	})
+	assert.equal(submissions(steps), RUN_2B.liveRequoteSends)
+	assert.equal(RUN_2B.liveRequoteSends, 15)
+})
+
+test('run 2b replay: hysteresis cuts sends from 15 to 8 and no send is a pause/resume flip', () => {
+	const steps = replay2b(RUN_2B_CFG)
+	assert.equal(submissions(steps), 8)
+	for (const s of steps) {
+		if (!s.plan.cancels.length && !s.plan.place.length) continue
+		// Every cancel has a keep-rule reason; every placement fills a side that was empty.
+		for (const side of s.plan.sides) assert.ok(side.action !== 'none' || side.reason === 'price_drift' || side.reason === 'near_expiry', `tick ${s.tick}: ${JSON.stringify(side)}`)
+		if (s.plan.mode === 'pause') assert.deepEqual(s.plan.place, [], `tick ${s.tick}`)
+	}
+	// Still quoting both sides at the end, and both real fills were taken as in the live run.
+	assert.equal(steps.flatMap((s) => s.filled).length, 2)
 })

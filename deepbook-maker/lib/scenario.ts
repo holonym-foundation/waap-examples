@@ -17,6 +17,10 @@ export interface ScenarioTick {
 	halfTouchBps?: number
 	/** Fill this fraction (0-1) of our resting order on a side, at its price, before planning. */
 	fill?: { bid?: number; ask?: number }
+	/** Or fill this quantity (capped at what rests) on a side — for replaying a logged run. */
+	fillQty?: { bid?: number; ask?: number }
+	/** Tick time; defaults to `index × pollMs`. Replays use the logged times. */
+	atMs?: number
 }
 
 export interface ScenarioStep {
@@ -45,15 +49,16 @@ export function runScenario(args: {
 	let resting: TrackedOrder[] = []
 	let seq = 0
 	const steps: ScenarioStep[] = []
+	let liquidityPausedSinceMs: number | undefined
 
 	args.ticks.forEach((t, i) => {
-		const now = i * pollMs
+		const now = t.atMs ?? i * pollMs
 		const filled: ScenarioStep['filled'] = []
 		// Scripted fills against what is resting.
 		for (const o of resting) {
 			const frac = o.isBid ? t.fill?.bid : t.fill?.ask
-			if (!frac) continue
-			const q = Math.floor(o.quantity * frac)
+			const want = o.isBid ? t.fillQty?.bid : t.fillQty?.ask
+			const q = want !== undefined ? Math.min(o.quantity, want) : frac ? Math.floor(o.quantity * frac) : 0
 			if (q <= 0) continue
 			if (o.isBid) freeBase += q // quote was locked at placement
 			else freeQuote += q * o.price
@@ -73,9 +78,11 @@ export function runScenario(args: {
 				fees: { makerFeeRate: args.makerFeeRate ?? 0, verified: true },
 				inv: { free: { base: freeBase, quote: freeQuote }, locked: { base: lockedBase, quote: lockedQuote } },
 				resting: resting.map((o) => ({ ...o })),
+				liquidityPausedSinceMs,
 			},
 			args.cfg,
 		)
+		liquidityPausedSinceMs = plan.liquidityPausedSinceMs
 		// Apply: cancels release, places lock.
 		for (const id of plan.cancels) {
 			const o = resting.find((r) => r.orderId === id)
