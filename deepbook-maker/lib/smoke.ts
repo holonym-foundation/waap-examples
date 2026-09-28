@@ -27,6 +27,8 @@
  *     quoting stopped (Arun, option A, 2026-09-27).
  *   - `lateCleanup` — cleanup was confirmed more than `lateCleanupMinutes` after quoting
  *     stopped. The run is still clean at the end; the delay is a fact about operations.
+ *   - `readFailures` — ticks that failed while nothing was being sent (an RPC read outage),
+ *     at most `maxReadFailures` (default 5) per run. A failed tick next to a send FAILS.
  * - `FAIL`: anything else, including missing evidence.
  *
  * ## Utility is graded separately
@@ -82,6 +84,8 @@ export interface SmokeInput {
 	minMinutes?: number
 	/** Cleanup confirmed later than this after `quotes_stopped` is disclosed. Default 15. */
 	lateCleanupMinutes?: number
+	/** Failed ticks that sent nothing (read-only outages), disclosed up to this many. Default 5. */
+	maxReadFailures?: number
 }
 
 export interface SmokeException {
@@ -99,7 +103,7 @@ export interface SmokeGrade {
 	verdict: SmokeVerdict
 	failures: string[]
 	exceptions: SmokeException[]
-	disclosures: { gasExceptions: number; lateCleanup: { minutes: number } | null }
+	disclosures: { gasExceptions: number; lateCleanup: { minutes: number } | null; readFailures: string[] }
 	utility: 'DEMONSTRATED' | 'INCONCLUSIVE'
 	facts: Record<string, unknown>
 }
@@ -167,8 +171,26 @@ export function gradeSmoke(input: SmokeInput): SmokeGrade {
 		minutes = (t(quotesStopped) - t(start)) / 60_000
 		if (!(minutes >= minMinutes)) failures.push(`quoted ${minutes.toFixed(1)} min from agent_start to quotes_stopped; needs ≥ ${minMinutes}`)
 	}
-	const tickFailed = lines.filter((l) => l.message === 'tick_failed').length
-	if (tickFailed !== 0) failures.push(`tick_failed = ${tickFailed}`)
+	// A failed tick is exempt only when nothing was being sent: no send intent, submission
+	// or unknown outcome since the previous tick ended. Those are disclosed, at most
+	// `maxReadFailures` per run (Arun, 2026-09-28: "your call"). Anything else FAILS.
+	const readFailures: string[] = []
+	let sinceTick: LogLine[] = []
+	for (const l of lines) {
+		if (l.message === 'next_check' || l.message === 'agent_start') {
+			sinceTick = []
+			continue
+		}
+		if (l.message === 'tick_failed') {
+			const sending = sinceTick.some((x) => ['op_intent', 'tx_submitted', 'send_outcome_unknown', 'send_refused'].includes(x.message))
+			if (sending) failures.push(`tick_failed at ${l.ts} while a send was in progress: ${String(l['error'] ?? '')}`)
+			else readFailures.push(l.ts)
+			continue
+		}
+		sinceTick.push(l)
+	}
+	const maxReadFailures = input.maxReadFailures ?? 5
+	if (readFailures.length > maxReadFailures) failures.push(`${readFailures.length} read-only tick failures; at most ${maxReadFailures} are disclosable`)
 	if (lines.some((l) => l.message === 'too_many_consecutive_errors')) failures.push('the loop exited on too_many_consecutive_errors')
 	if (start && start['dryRun'] !== false) failures.push('agent_start is not a live run (dryRun is not false)')
 	const missingSettings = start ? SETTINGS.filter((k) => start[k] === undefined) : [...SETTINGS]
@@ -261,12 +283,12 @@ export function gradeSmoke(input: SmokeInput): SmokeGrade {
 	const fills = lines.filter((l) => l.message === 'fill')
 	const utility: SmokeGrade['utility'] = realPlacement && fills.length > 0 ? 'DEMONSTRATED' : 'INCONCLUSIVE'
 
-	const verdict: SmokeVerdict = failures.length ? 'FAIL' : exceptions.length || lateCleanup ? 'PASS_WITH_DISCLOSED_EXCEPTION' : 'PASS'
+	const verdict: SmokeVerdict = failures.length ? 'FAIL' : exceptions.length || lateCleanup || readFailures.length ? 'PASS_WITH_DISCLOSED_EXCEPTION' : 'PASS'
 	return {
 		verdict,
 		failures,
 		exceptions,
-		disclosures: { gasExceptions: exceptions.length, lateCleanup },
+		disclosures: { gasExceptions: exceptions.length, lateCleanup, readFailures },
 		utility,
 		facts: {
 			runId: runId ?? null,

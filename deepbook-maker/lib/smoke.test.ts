@@ -176,9 +176,26 @@ test('under 60 minutes of quoting FAILS', () => {
 	assert.equal(gradeSmoke(input).verdict, 'FAIL')
 })
 
-test('a tick_failed FAILS', () => {
+test('a read-only tick_failed (nothing being sent) is DISCLOSED, not a plain PASS', () => {
 	const input = clean()
-	input.lines.splice(4, 0, { ts: at(3), message: 'tick_failed', runId: RUN })
+	input.lines.splice(4, 0, { ts: at(2.9), message: 'next_check', runId: RUN }, { ts: at(3), message: 'tick_failed', runId: RUN, error: 'fetch failed' })
+	const g = gradeSmoke(input)
+	assert.deepEqual(g.failures, [])
+	assert.equal(g.verdict, 'PASS_WITH_DISCLOSED_EXCEPTION')
+	assert.deepEqual(g.disclosures.readFailures, [at(3)])
+})
+
+test('a tick_failed while a send was in progress FAILS', () => {
+	const input = clean()
+	input.lines.splice(4, 0, { ts: at(2.9), message: 'next_check', runId: RUN }, { ts: at(2.95), message: 'op_intent', runId: RUN }, { ts: at(3), message: 'tick_failed', runId: RUN })
+	assert.equal(gradeSmoke(input).verdict, 'FAIL')
+})
+
+test('more read-only tick failures than the cap FAIL', () => {
+	const input = clean()
+	const extra: LogLine[] = []
+	for (let i = 0; i < 6; i++) extra.push({ ts: at(40 + i), message: 'next_check', runId: RUN }, { ts: at(40.5 + i), message: 'tick_failed', runId: RUN })
+	input.lines.splice(7, 0, ...extra)
 	assert.equal(gradeSmoke(input).verdict, 'FAIL')
 })
 
