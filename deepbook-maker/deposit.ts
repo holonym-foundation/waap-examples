@@ -31,7 +31,8 @@ function amountFor(coinKey: string): number {
 }
 
 async function main(): Promise<void> {
-	const ctx = await openContext({ purpose: 'deposit' })
+	// ADOPT_MANAGER=1: fund an existing manager from a checkout with no state file yet.
+	const ctx = await openContext({ purpose: 'deposit', adopt: process.env.ADOPT_MANAGER === '1' })
 	const managerId = ctx.state.balanceManagerId
 	const deposits = [POOL.baseCoin, POOL.quoteCoin].map((coinKey) => ({ coinKey, amount: amountFor(coinKey) })).filter((d) => d.amount > 0)
 	log('event', 'deposit_start', { network: NETWORK, poolKey: POOL_KEY, balanceManagerId: managerId ?? null, deposits, dryRun: DRY_RUN, owner: ctx.owner, runId: ctx.state.runId ?? null })
