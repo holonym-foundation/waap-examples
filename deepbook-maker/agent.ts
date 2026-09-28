@@ -27,7 +27,7 @@ import { addTurnover, evaluateLimits, MIST_PER_SUI, pruneTurnover, rollingTurnov
 import { openContext, type Context } from './lib/context.ts'
 import { DEFAULT_CYCLE } from './lib/costs.ts'
 import { findCreatedBalanceManagerId, parseOrderCanceled, parseOrderPlaced, type RpcTransactionBlock } from './lib/events.ts'
-import { FillLedger, ORDER_FILLED_TYPE, walkFills, type CollectedFill } from './lib/fills.ts'
+import { DEFAULT_FILL_SCAN_PAGES, FillLedger, ORDER_FILLED_TYPE, walkFills, type CollectedFill } from './lib/fills.ts'
 import { GAS_CAPS, GasBudgetError, RESERVE_PER_TX_MIST, reconcilePending, runCleanup, sendWithIntent } from './lib/ops.ts'
 import { blocksQuoting, makeClientOrderId } from './lib/pending.ts'
 import { addPlaceOrder } from './lib/ptb.ts'
@@ -84,7 +84,7 @@ const MAX_TICKS = process.env.MAX_TICKS ? num('MAX_TICKS', 0) : undefined
 const BOOK_TICKS = num('BOOK_TICKS', 5)
 const MAX_CONSECUTIVE_ERRORS = num('MAX_CONSECUTIVE_ERRORS', 20)
 const INVENTORY_LIMITED_EXIT_TICKS = num('INVENTORY_LIMITED_EXIT_TICKS', 10)
-const FILL_SCAN_PAGES = num('FILL_SCAN_PAGES', 8)
+const FILL_SCAN_PAGES = num('FILL_SCAN_PAGES', DEFAULT_FILL_SCAN_PAGES)
 const FILL_PAGE_SIZE = num('FILL_PAGE_SIZE', 50)
 /** Skip the fill backfill after a restart. Turnover and P&L for the run are then marked incomplete. */
 const FILL_SKIP_GAP = flag('FILL_SKIP_GAP', false)

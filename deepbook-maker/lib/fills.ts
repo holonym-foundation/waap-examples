@@ -31,10 +31,14 @@
  *   1. anchor once — a `TimeRange` query at the run's start gives the cursor,
  *   2. walk forward under `MoveEventType`, filtering pool and manager in this file.
  *
- * Volume, measured 2026-09-24: ~865 `OrderFilled` events per hour across all DeepBook
- * pools (600 events spanning 41.6 minutes), of which ~29 % are DEEP/SUI. A 24 h run is
- * roughly 21,000 events — about 420 pages of 50, or one page every three minutes.
- * At a 60 s tick that is well under one extra RPC read per tick.
+ * Volume. Measured 2026-09-24: ~865 `OrderFilled` events per hour across all DeepBook
+ * pools. Re-measured 2026-09-28 in live run 2b: ~4,700 an hour (the steady-state
+ * `fill_scan` lines), in bursts of up to ~11,000 an hour, and up to 6 pages of 50 per
+ * 60–85 s tick. A 24 h run is now ~113,000 events, ~2,300 pages. The run-2 attempt with
+ * 8 pages per tick was still behind after 30 minutes; run 2b with 80 reached the head on
+ * its second tick. So the default budget is 80 pages (4,000 events ≈ 50 min of history per
+ * tick): steady state uses under a tenth of it, and a restart's gap is backfilled at
+ * about 50 min of history per tick with quoting paused until it reaches the head.
  *
  * ## Restart and dedup
  *
@@ -45,6 +49,11 @@
  * `FillLedger` drops anything it has already seen.
  */
 import { parseOrderFilled, type Fill, type ParseOptions, type RpcEvent } from './events.ts'
+
+/** All-pool `OrderFilled` events per hour, measured in live run 2b (2026-09-28). */
+export const MEASURED_FILL_EVENTS_PER_HOUR = 4_700
+/** Default pages per tick (see "Volume" above). */
+export const DEFAULT_FILL_SCAN_PAGES = 80
 
 /** The `(txDigest, eventSeq)` pair the JSON-RPC uses to page through events. */
 export interface EventCursor {
@@ -213,7 +222,7 @@ export async function walkFills(args: {
 	const { query, opts, endTimeMs } = args
 	const ledger = args.ledger ?? new FillLedger()
 	const limit = args.limit ?? 50
-	const maxPages = args.maxPages ?? 60
+	const maxPages = args.maxPages ?? DEFAULT_FILL_SCAN_PAGES
 
 	let cursor = args.cursor
 	let pages = 0

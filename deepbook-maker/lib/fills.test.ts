@@ -5,6 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+	DEFAULT_FILL_SCAN_PAGES,
+	MEASURED_FILL_EVENTS_PER_HOUR,
 	collectFillsFromPage,
 	cursorOf,
 	FillLedger,
@@ -223,4 +225,13 @@ test('the exact boundary: last page has hasNextPage false on the final allowed r
 	const r = await walkFills({ query, cursor: null, opts: OPTS, maxPages: 3 })
 	assert.equal(r.pages, 3)
 	assert.equal(r.completion, 'head')
+})
+
+test('the default page budget covers a burst tick with room to spare and backfills ~50 min of history per tick', () => {
+	const perPage = 50
+	// Steady state: a slow 90 s tick at the measured peak burst (~11,000/h).
+	assert.ok(Math.ceil((11_000 / 3600) * 90 / perPage) * 4 <= DEFAULT_FILL_SCAN_PAGES)
+	// Backfill: history covered per tick at the measured average rate, in minutes.
+	const minutesPerTick = (DEFAULT_FILL_SCAN_PAGES * perPage) / MEASURED_FILL_EVENTS_PER_HOUR * 60
+	assert.ok(minutesPerTick >= 45, `${minutesPerTick}`)
 })
