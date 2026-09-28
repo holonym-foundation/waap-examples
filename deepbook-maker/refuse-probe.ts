@@ -24,18 +24,17 @@ import {
 	NETWORK,
 	POOL,
 	POOL_KEY,
-	STATE_FILE,
 	buildKindBytes,
 	fatal,
 	getLastSendTxResult,
 	getLastSendTxStdout,
 	log,
 	makeDeepBookClient,
-	readBalanceManagerId,
 	resolveOwner,
 	signAndSendTx,
 } from './lib/waap.ts'
 import { classifyProbeResponse } from './lib/policy.ts'
+import { openContext } from './lib/context.ts'
 
 if (!POOL) {
 	console.error(`[${AGENT_ID}] unknown POOL_KEY ${POOL_KEY} on ${NETWORK}`)
@@ -45,8 +44,10 @@ if (!POOL) {
 const PROBE_SUI = Number(process.env.PROBE_SUI ?? '999')
 
 async function main(): Promise<void> {
-	const owner = await resolveOwner()
-	const balanceManagerId = readBalanceManagerId()
+	// Same lock and manager resolution as every other sender: it cannot run beside the loop.
+	const ctx = await openContext({ purpose: 'refuse_probe' })
+	const owner = ctx.owner
+	const balanceManagerId = ctx.state.balanceManagerId
 
 	log('event', 'refuse_probe_start', {
 		network: NETWORK,
@@ -60,7 +61,6 @@ async function main(): Promise<void> {
 
 	if (!balanceManagerId) {
 		log('error', 'balance_manager_missing', {
-			stateFile: STATE_FILE,
 			note: 'the probe deposits into a manager: set DEEPBOOK_BALANCE_MANAGER_ID or run the agent once first',
 		})
 		process.exit(1)

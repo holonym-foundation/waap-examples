@@ -111,10 +111,10 @@ test('a fee in SUI comes off realized spread; a fee in DEEP is reported, not con
 	})
 	near(r.grossRealizedSui, 0.02)
 	near(r.feeSui, 0.0005)
-	near(r.feeBase, 0.25)
+	near(r.feeDeep, 0.25)
 	near(r.realizedSui, 0.02 - 0.0005)
 	// The DEEP fee is NOT silently priced into the ratio.
-	assert.notEqual(r.feeBase, 0)
+	assert.notEqual(r.feeDeep, 0)
 })
 
 test('the two sides are counted separately, which is what a both-sides fill count needs', () => {
@@ -130,4 +130,25 @@ test('the two sides are counted separately, which is what a both-sides fill coun
 	})
 	assert.equal(r.buyFills, 2)
 	assert.equal(r.sellFills, 1)
+})
+
+test('fees and roles flow from the parser shape into the ledger: taker counted, self skipped, assets kept apart', () => {
+	const r = realizedSpread({
+		fills: [
+			{ isBid: true, price: 0.0196, quantity: 100, role: 'maker', fee: 0.001, feeAsset: 'quote' },
+			{ isBid: false, price: 0.0198, quantity: 100, role: 'taker', fee: 0.5, feeAsset: 'base' },
+			{ isBid: true, price: 0.02, quantity: 50, role: 'self', fee: 0.2, feeAsset: 'DEEP' },
+		],
+		openingBase: 0,
+		openingBasis: 0,
+		closingMid: 0.0197,
+	})
+	near(r.grossRealizedSui, 0.02)
+	near(r.feeSui, 0.001)
+	near(r.feeBase, 0.5)
+	near(r.feeDeep, 0.2)
+	assert.equal(r.takerFills, 1)
+	assert.equal(r.selfFills, 1)
+	assert.equal(r.matchedBase, 100)
+	assert.equal(r.openBase, 0)
 })

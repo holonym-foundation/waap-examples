@@ -9,9 +9,12 @@
 #
 #   1. launch   ./node_modules/.bin/tsx agent.ts          (directly: npm does not forward
 #                                                          SIGTERM to the agent on Linux)
-#   2. stop     SIGTERM to the agent's pid                (the handler writes `shutdown`)
-#   3. confirm  no agent process survives
-#   4. clean up ./node_modules/.bin/tsx stop.ts           (cancel every order, withdraw both coins)
+#   2. a second loop on the same account and pool is refused (the lock)
+#   3. stop     ./node_modules/.bin/tsx stop.ts           (hands off to the live loop: SIGTERM,
+#                                                          the loop stops quoting, runs its own
+#                                                          cancel → settle → withdraw, exits;
+#                                                          stop then verifies)
+#   4. confirm  no agent process survives and the lock is gone
 #
 # This script runs exactly that sequence as a dry run and grades each step.
 #
@@ -25,8 +28,8 @@
 # - `HOME` is a fresh temp directory, so no waap-cli session is visible.
 # - A fake `waap-cli` sits first on PATH. It records every invocation and rejects every
 #   one. The check passes only if it recorded zero `send-tx` calls.
-# - State, pid and log paths are all inside the temp directory; the recipe's own
-#   `state.json`, `agent.pid` and `logs/` are untouched.
+# - State, lock and log paths are all inside the temp directory; the recipe's own
+#   `state.json`, lock directory and `logs/` are untouched.
 #
 # It reads mainnet (the book and the manager object) and writes nothing to chain.
 set -u
@@ -38,7 +41,7 @@ mkdir -p "$TMP/bin" "$TMP/home"
 : > "$TMP/empty.env"
 LOG="$TMP/run.jsonl"
 STATE="$TMP/state.json"
-PIDFILE="$TMP/agent.pid"
+LOCKS="$TMP/locks"
 CALLS="$TMP/waap-cli-calls.log"
 : > "$CALLS"
 # Any existing BalanceManager works for a dry build; the default is the one the recipe's
@@ -68,7 +71,7 @@ run_isolated() {
 		AGENT_DRY_RUN=1 \
 		NETWORK=mainnet \
 		STATE_FILE="$STATE" \
-		PID_FILE="$PIDFILE" \
+		LOCK_DIR="$LOCKS" \
 		AGENT_LOG_FILE="$LOG" \
 		DEEPBOOK_BALANCE_MANAGER_ID="$MANAGER" \
 		POLL_MS=2000 \
@@ -82,45 +85,44 @@ note ""
 # --- 1. launch, directly -------------------------------------------------------
 run_isolated "$RECIPE_DIR/node_modules/.bin/tsx" agent.ts > "$TMP/agent.stdout" 2>&1 &
 LAUNCH_PID=$!
-
-for _ in $(seq 1 60); do
-	[ -s "$PIDFILE" ] && grep -q '"message":"tick_done"' "$LOG" 2>/dev/null && break
+for _ in $(seq 1 90); do
+	grep -qE '"message":"(quote_plan|quote_paused|tick_no_submit|inventory_limited)"' "$LOG" 2>/dev/null && break
 	sleep 1
 done
-AGENT_PID=$(cat "$PIDFILE" 2>/dev/null || echo "")
-note "launched pid: $LAUNCH_PID · agent pid (from PID_FILE): ${AGENT_PID:-<none>}"
-
-check "the agent wrote a pid file" '[ -n "$AGENT_PID" ]'
+LOCKFILE=$(ls "$LOCKS"/*.lock 2>/dev/null | head -1)
+AGENT_PID=$(sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$LOCKFILE" 2>/dev/null)
+note "launched pid: $LAUNCH_PID · agent pid (from its lock): ${AGENT_PID:-<none>}"
+check "the agent holds the account/pool lock" '[ -n "$AGENT_PID" ]'
 if [ -z "$AGENT_PID" ]; then
-	note "no pid file; output follows:"; tail -5 "$TMP/agent.stdout"; kill "$LAUNCH_PID" 2>/dev/null; exit 1
+	note "no lock; output follows:"; tail -5 "$TMP/agent.stdout"; kill "$LAUNCH_PID" 2>/dev/null; exit 1
 fi
 check "agent_start logged with dryRun true" 'grep "\"message\":\"agent_start\"" "$LOG" | grep -q "\"dryRun\":true"'
-check "at least one tick completed" 'grep -q "\"message\":\"tick_done\"" "$LOG"'
+check "at least one tick planned" 'grep -qE "\"message\":\"(quote_plan|quote_paused|tick_no_submit)\"" "$LOG"'
 
-# --- 2. SIGTERM to the agent -----------------------------------------------------
+# --- 2. a duplicate loop is refused ----------------------------------------------
+run_isolated "$RECIPE_DIR/node_modules/.bin/tsx" agent.ts > "$TMP/dup.stdout" 2>&1
+DUP_EXIT=$?
+check "a second loop on the same account and pool exits non-zero" '[ "$DUP_EXIT" -ne 0 ]'
+check "and says the lock is held by a live process" 'grep -q "holder is live" "$TMP/dup.stdout"'
+
+# --- 3. stop hands off to the live loop ----------------------------------------------
 [ "$AGENT_PID" = "$$" ] && { note "refusing to signal this shell"; exit 1; }
-note "sending SIGTERM to the agent, pid $AGENT_PID"
-kill -TERM "$AGENT_PID" 2>/dev/null
-for _ in $(seq 1 20); do
-	grep -q '"message":"shutdown"' "$LOG" && break
-	sleep 1
-done
-check "a shutdown line was written" 'grep -q "\"message\":\"shutdown\"" "$LOG"'
-check "the shutdown reports sendTxCalls 0" 'grep "\"message\":\"shutdown\"" "$LOG" | grep -q "\"sendTxCalls\":0"'
+run_isolated "$RECIPE_DIR/node_modules/.bin/tsx" stop.ts > "$TMP/stop.stdout" 2>&1
+STOP_EXIT=$?
+check "stop.ts handed off to the loop (SIGTERM) instead of withdrawing under it" 'grep -q "\"message\":\"stop_handoff\"" "$LOG"'
+check "the loop logged quotes_stopped before any cleanup" 'awk "/\"quotes_stopped\"/{q=NR} /\"cleanup_(dry_run|started|not_needed)\"/{if(!c)c=NR} END{exit !(q && c && q<c)}" "$LOG"'
+check "the loop built its own cancel → settle → withdraw" 'grep "\"message\":\"tx_built\"" "$LOG" | grep -q "\"kind\":\"cleanup\""'
+check "the loop exited through process_exit with sendTxCalls 0" 'grep "\"message\":\"process_exit\"" "$LOG" | grep "\"proc\":\"loop\"" | grep -q "\"sendTxCalls\":0"'
+check "stop.ts finished (exit 0) after the handoff" '[ "$STOP_EXIT" -eq 0 ] && grep -q "\"message\":\"stop_done\"" "$LOG"'
 
-# --- 3. no survivor ----------------------------------------------------------------
+# --- 4. no survivor, no lock ---------------------------------------------------------
 for _ in $(seq 1 20); do
 	kill -0 "$AGENT_PID" 2>/dev/null || break
 	sleep 1
 done
 check "no agent process survives" '! kill -0 "$AGENT_PID" 2>/dev/null'
 check "the launched process exited too" '! kill -0 "$LAUNCH_PID" 2>/dev/null'
-check "the pid file was removed" '[ ! -e "$PIDFILE" ]'
-
-# --- 4. cleanup transaction, dry --------------------------------------------------------
-run_isolated "$RECIPE_DIR/node_modules/.bin/tsx" stop.ts > "$TMP/stop.stdout" 2>&1
-check "stop.ts built the cancel-and-withdraw transaction" 'grep "\"message\":\"tx_built\"" "$LOG" | grep -q "\"kind\":\"stop\""'
-check "stop.ts finished dry, with no digest" 'grep "\"message\":\"stop_done\"" "$LOG" | grep -q "\"dryRun\":true"'
+check "the lock was released" '[ -z "$(ls "$LOCKS"/*.lock 2>/dev/null)" ]'
 
 # --- the boundary: nothing reached a signer ---------------------------------------------
 check "the fake waap-cli recorded zero send-tx calls" '! grep -q "send-tx" "$CALLS"'

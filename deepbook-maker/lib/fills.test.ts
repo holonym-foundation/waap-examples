@@ -189,3 +189,38 @@ test('all() returns fills in timestamp order whatever order they arrived', () =>
 		['d1', 'd2'],
 	)
 })
+
+// --- completion reason (28 Sep plan review, reproduced boundary) ---------------
+
+test('end of stream on exactly the last allowed page is `head`, not truncated', async () => {
+	// The old walk returned `truncated: true, reachedEnd: false` here: a caller gating on
+	// it would wait forever for a backfill that had finished.
+	const r = await walkFills({ query: async () => ({ data: [], hasNextPage: false, nextCursor: null }), cursor: null, opts: OPTS, maxPages: 1 })
+	assert.equal(r.completion, 'head')
+	assert.equal(r.truncated, false)
+	assert.equal(r.reachedEnd, false)
+})
+
+test('a walk that runs out of pages with more to read is `page_budget`, and resumes from its cursor', async () => {
+	let n = 0
+	const query: QueryEvents = async () => {
+		n++
+		return { data: [{ type: 'x', id: { txDigest: `D${n}`, eventSeq: '0' }, timestampMs: String(1000 + n) }], hasNextPage: true, nextCursor: { txDigest: `D${n}`, eventSeq: '0' } }
+	}
+	const r = await walkFills({ query, cursor: null, opts: OPTS, maxPages: 2 })
+	assert.equal(r.completion, 'page_budget')
+	assert.equal(r.truncated, true)
+	assert.deepEqual(r.cursor, { txDigest: 'D2', eventSeq: '0' })
+	assert.equal(r.watermarkMs, 1002)
+})
+
+test('the exact boundary: last page has hasNextPage false on the final allowed read → head', async () => {
+	let n = 0
+	const query: QueryEvents = async () => {
+		n++
+		return { data: [], hasNextPage: n < 3, nextCursor: { txDigest: `D${n}`, eventSeq: '0' } }
+	}
+	const r = await walkFills({ query, cursor: null, opts: OPTS, maxPages: 3 })
+	assert.equal(r.pages, 3)
+	assert.equal(r.completion, 'head')
+})

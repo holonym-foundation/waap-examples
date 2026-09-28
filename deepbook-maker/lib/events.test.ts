@@ -159,3 +159,58 @@ test('price scaling is the documented inverse of the SDK’s convertPrice', () =
 	const onChain = Math.round((human * DEEP_SUI.floatScalar * DEEP_SUI.quoteScalar) / DEEP_SUI.baseScalar)
 	near(priceToHuman(onChain, DEEP_SUI), human, 1e-12)
 })
+
+// --- roles and fees (28 Sep review, items 4-5) --------------------------------
+//
+// SYNTHETIC: the real DEEP/SUI fill carries zero fees and our manager only as maker. These
+// cases edit a copy of that real event to put a fee on it and to put our manager on the
+// taker side, so the direction and fee paths are exercised. They are labelled synthetic
+// because no such fill of ours exists on chain.
+
+function withFields(tx: RpcTransactionBlock, patch: Record<string, unknown>): RpcTransactionBlock {
+	return {
+		...tx,
+		events: (tx.events ?? []).map((e) =>
+			e.type.endsWith('::order_info::OrderFilled') ? { ...e, parsedJson: { ...(e.parsedJson as object), ...patch } } : e,
+		),
+	}
+}
+
+test('SYNTHETIC maker fill: role maker, fee carried with its scale and asset (DEEP)', () => {
+	const tx = withFields(fixture(FILL), { maker_fee: '250000', maker_fee_is_deep: true })
+	const [f] = parseOrderFilled(tx, { ...DEEP_SUI, poolId: DEEP_SUI_POOL, balanceManagerId: MAKER_MANAGER })
+	assert.equal(f.role, 'maker')
+	assert.equal(f.isBid, false)
+	assert.equal(f.fee, 0.25) // 250000 ÷ 1e6 DEEP
+	assert.equal(f.feeAsset, 'DEEP')
+})
+
+test('SYNTHETIC maker fill paid in the input token: an ask pays in base, a bid in quote', () => {
+	const ask = parseOrderFilled(withFields(fixture(FILL), { maker_fee: '3000000', maker_fee_is_deep: false }), { ...DEEP_SUI, balanceManagerId: MAKER_MANAGER })[0]
+	assert.equal(ask.feeAsset, 'base')
+	assert.equal(ask.fee, 3) // 3e6 ÷ DEEP 1e6
+	const bid = parseOrderFilled(withFields(fixture(FILL), { maker_fee: '3000000', maker_fee_is_deep: false, taker_is_bid: false }), { ...DEEP_SUI, balanceManagerId: MAKER_MANAGER })[0]
+	assert.equal(bid.isBid, true)
+	assert.equal(bid.feeAsset, 'quote')
+	assert.equal(bid.fee, 0.003) // 3e6 ÷ SUI 1e9
+})
+
+test('SYNTHETIC taker fill: our side IS the taker’s side, and the taker fee is ours', () => {
+	const ours = '0x00000000000000000000000000000000000000000000000000000000000000aa'
+	const tx = withFields(fixture(FILL), { taker_balance_manager_id: ours, taker_fee: '1000000000', taker_fee_is_deep: false, taker_order_id: '42' })
+	const fills = parseOrderFilled(tx, { ...DEEP_SUI, balanceManagerId: ours })
+	assert.equal(fills.length, 1)
+	const f = fills[0]
+	assert.equal(f.role, 'taker')
+	// taker_is_bid: true in the fixture — as the taker, WE bought.
+	assert.equal(f.isBid, true)
+	assert.equal(f.ownOrderId, '42')
+	assert.equal(f.fee, 1) // 1e9 ÷ SUI 1e9, a bid pays in quote
+	assert.equal(f.feeAsset, 'quote')
+})
+
+test('SYNTHETIC self-match: our manager on both sides is flagged, not invented into a one-sided trade', () => {
+	const tx = withFields(fixture(FILL), { taker_balance_manager_id: MAKER_MANAGER })
+	const [f] = parseOrderFilled(tx, { ...DEEP_SUI, balanceManagerId: MAKER_MANAGER })
+	assert.equal(f.role, 'self')
+})

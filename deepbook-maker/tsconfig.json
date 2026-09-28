@@ -18,12 +18,5 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false
   },
-  "include": [
-    "agent.ts",
-    "deposit.ts",
-    "stop.ts",
-    "refuse-probe.ts",
-    "build-dryrun.ts",
-    "lib/**/*.ts"
-  ]
+  "include": ["*.ts", "lib/**/*.ts"]
 }

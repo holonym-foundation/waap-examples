@@ -162,26 +162,39 @@ export class FillLedger {
 	}
 }
 
+/**
+ * Why a walk stopped. Only `head` and `end_time` mean "caught up"; `page_budget` means
+ * there may be more, and the returned cursor is where to carry on.
+ *
+ * The old boolean `truncated = pages >= maxPages` was wrong at the boundary: a walk
+ * whose LAST allowed page was also the last page of the stream (`hasNextPage: false`)
+ * reported `truncated: true`, so a caller gating on it would wait forever for a
+ * backfill that had already finished.
+ */
+export type WalkCompletion = 'head' | 'end_time' | 'page_budget'
+
 export interface WalkResult {
 	/** Every fill for this pool and manager found in the walk, deduped. */
 	fills: CollectedFill[]
-	/** Where to resume next time. Null when nothing moved. */
+	/** Where to resume next time. Unchanged when nothing moved. */
 	cursor: EventCursor | null
 	/** How many pages were read, and how many raw events crossed the filter. */
 	pages: number
 	scanned: number
-	/** True when the walk stopped on its page budget rather than catching up. */
+	completion: WalkCompletion
+	/** `completion === 'page_budget'`. Kept for callers that read the old field. */
 	truncated: boolean
-	/** True when the walk stopped because it passed `endTimeMs`. */
+	/** `completion === 'end_time'`. */
 	reachedEnd: boolean
+	/** Timestamp of the last event read, ms — the watermark the walk has provably covered. */
+	watermarkMs?: number
 }
 
 /**
  * Walk forward from `cursor` collecting our fills, and return where to resume.
  *
  * Stops at the head of the stream, at `endTimeMs`, or at `maxPages` — whichever comes
- * first. `truncated` says which: a truncated walk has NOT caught up, and the returned
- * cursor is where to carry on, so the next call finishes the job. Nothing is dropped.
+ * first — and says which in `completion`.
  *
  * The cursor is advanced only past pages that were fully processed, so a throw
  * mid-walk leaves the caller's saved cursor pointing at un-processed events rather than
@@ -205,7 +218,8 @@ export async function walkFills(args: {
 	let cursor = args.cursor
 	let pages = 0
 	let scanned = 0
-	let reachedEnd = false
+	let completion: WalkCompletion = 'page_budget'
+	let watermarkMs: number | undefined
 	const fills: CollectedFill[] = []
 
 	while (pages < maxPages) {
@@ -217,27 +231,43 @@ export async function walkFills(args: {
 		// Trim the page at the end boundary before parsing, so a fill after the window is
 		// never counted and the cursor never advances past it.
 		let usable = data
+		let hitEnd = false
 		if (endTimeMs !== undefined) {
 			const cut = data.findIndex((e) => Number(e.timestampMs) > endTimeMs)
 			if (cut !== -1) {
 				usable = data.slice(0, cut)
-				reachedEnd = true
+				hitEnd = true
 			}
 		}
 
 		fills.push(...ledger.add(collectFillsFromPage(usable, opts)))
+		const lastTs = Number(usable.at(-1)?.timestampMs)
+		if (Number.isFinite(lastTs)) watermarkMs = lastTs
 
-		if (reachedEnd) {
+		if (hitEnd) {
 			// Resume from the last event INSIDE the window, not from the page's cursor.
 			const last = usable.at(-1)
 			const c = last ? cursorOf(last) : null
 			if (c) cursor = c
+			completion = 'end_time'
 			break
 		}
 
 		cursor = page.nextCursor ?? cursor
-		if (!page.hasNextPage) break
+		if (!page.hasNextPage) {
+			completion = 'head'
+			break
+		}
 	}
 
-	return { fills, cursor, pages, scanned, truncated: pages >= maxPages && !reachedEnd, reachedEnd }
+	return {
+		fills,
+		cursor,
+		pages,
+		scanned,
+		completion,
+		truncated: completion === 'page_budget',
+		reachedEnd: completion === 'end_time',
+		watermarkMs,
+	}
 }

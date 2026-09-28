@@ -40,11 +40,22 @@
  *
  * Nothing here touches the network or the clock.
  */
-import type { Fill } from './events.ts'
+import type { FeeAsset, Fill } from './events.ts'
 
 export interface SpreadInput {
 	/** Fills in time order. Only `isBid`, `price`, `quantity` and the fees are read. */
-	fills: Array<Pick<Fill, 'isBid' | 'price' | 'quantity'> & { makerFee?: number; makerFeeIsDeep?: boolean }>
+	fills: Array<
+		Pick<Fill, 'isBid' | 'price' | 'quantity'> & {
+			/** Our fee on this fill and its asset (from `parseOrderFilled`). */
+			fee?: number
+			feeAsset?: FeeAsset
+			/** `self` fills are a wash and are skipped (their fees still count). */
+			role?: Fill['role']
+			/** Legacy form: maker fee, DEEP or quote. */
+			makerFee?: number
+			makerFeeIsDeep?: boolean
+		}
+	>
 	/** Base (DEEP) held when the run started. */
 	openingBase: number
 	/** The price that opening inventory was actually acquired at. Required — see (2). */
@@ -60,8 +71,14 @@ export interface SpreadResult {
 	grossRealizedSui: number
 	/** Maker fees charged in SUI. */
 	feeSui: number
-	/** Maker fees charged in DEEP. Reported, never converted. */
+	/** Fees charged in the base asset. Reported, never converted. */
 	feeBase: number
+	/** Fees charged in DEEP. Reported, never converted. On DEEP/SUI, DEEP is also the base asset. */
+	feeDeep: number
+	/** Fills where we were on both sides; excluded from matching. */
+	selfFills: number
+	/** Fills where we were the taker; included, and must be disclosed. */
+	takerFills: number
 	/** `grossRealizedSui − feeSui`. The figure the spread-vs-gas ratio uses. */
 	realizedSui: number
 	/** Base left open at the end. Positive = long, negative = short. */
@@ -96,14 +113,26 @@ export function realizedSpread(input: SpreadInput): SpreadResult {
 	let grossRealizedSui = 0
 	let feeSui = 0
 	let feeBase = 0
+	let feeDeep = 0
+	let selfFills = 0
+	let takerFills = 0
 	let buyFills = 0
 	let sellFills = 0
 
 	for (const f of fills) {
-		if (f.makerFee) {
-			if (f.makerFeeIsDeep) feeBase += f.makerFee
+		if (f.fee) {
+			if (f.feeAsset === 'DEEP') feeDeep += f.fee
+			else if (f.feeAsset === 'base') feeBase += f.fee
+			else feeSui += f.fee
+		} else if (f.makerFee) {
+			if (f.makerFeeIsDeep) feeDeep += f.makerFee
 			else feeSui += f.makerFee
 		}
+		if (f.role === 'self') {
+			selfFills++
+			continue
+		}
+		if (f.role === 'taker') takerFills++
 
 		let remaining = f.quantity
 		if (f.isBid) {
@@ -148,6 +177,9 @@ export function realizedSpread(input: SpreadInput): SpreadResult {
 		grossRealizedSui,
 		feeSui,
 		feeBase,
+		feeDeep,
+		selfFills,
+		takerFills,
 		realizedSui: grossRealizedSui - feeSui,
 		openBase,
 		unrealizedSui,

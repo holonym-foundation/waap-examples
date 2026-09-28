@@ -27,7 +27,9 @@ import fs from 'node:fs'
 import { FillLedger, walkFills, type CollectedFill } from './lib/fills.ts'
 import { parseGasUsed, totalGas, type GasReceipt } from './lib/receipts.ts'
 import { realizedSpread } from './lib/spread.ts'
-import { anchorCursorAt, fetchReceipt, MANAGER_KEY, POOL, POOL_KEY, poolScalars, queryFillEvents, readBalanceManagerId } from './lib/waap.ts'
+import { anchorCursorAt, ENV_BALANCE_MANAGER_ID, fetchReceipt, MANAGER_KEY, POOL, POOL_KEY, poolScalars, queryFillEvents, STATE_FILE } from './lib/waap.ts'
+import { resolveManager } from './lib/identity.ts'
+import { peekManagerId } from './lib/state.ts'
 
 const LOG = process.env.AGENT_LOG_FILE ?? './logs/deepbook-maker.jsonl'
 const OPENING_BASE = Number(process.env.OPENING_BASE ?? '0')
@@ -54,7 +56,10 @@ function readLog(file: string): LogRow[] {
 async function main() {
 	const rows = readLog(LOG)
 	const starts = rows.filter((r) => r.message === 'agent_start')
-	const shutdowns = rows.filter((r) => r.message === 'shutdown')
+	// The accounting window ends at CONFIRMED CLEANUP, not at loop exit: a fill can land
+	// between the loop stopping and the cancel. The 27 Sep smoke collected to 08:59 while
+	// its stop ran at 10:22.
+	const shutdowns = rows.filter((r) => r.message === 'cleanup_confirmed' || r.message === 'cleanup_verified_clean' || r.message === 'process_exit' || r.message === 'shutdown')
 	const books = rows.filter((r) => r.message === 'book_read')
 
 	const fromIso = process.env.FILL_FROM ?? starts[0]?.ts
@@ -66,7 +71,14 @@ async function main() {
 	const fromMs = Date.parse(fromIso)
 	const toMs = Date.parse(toIso)
 
-	const managerId = readBalanceManagerId() ?? (starts[0]?.balanceManagerId as string | undefined)
+	// The run log names its manager; state and environment, if set, must agree with it.
+	const logged = starts[0]?.balanceManagerId as string | undefined
+	const local = resolveManager({ stateId: peekManagerId(STATE_FILE), envId: ENV_BALANCE_MANAGER_ID }).id
+	if (logged && local && logged.toLowerCase() !== local) {
+		console.error(`manager conflict: the log's run used ${logged}, local state/environment says ${local}. Refusing to mix them.`)
+		process.exit(1)
+	}
+	const managerId = logged ?? local
 	if (!managerId) {
 		console.error('no BalanceManager id — set DEEPBOOK_BALANCE_MANAGER_ID')
 		process.exit(1)
@@ -118,7 +130,7 @@ async function main() {
 	const gas = totalGas(receipts)
 
 	const spread = realizedSpread({
-		fills: fills.map((f: CollectedFill) => ({ isBid: f.isBid, price: f.price, quantity: f.quantity })),
+		fills: fills.map((f: CollectedFill) => ({ isBid: f.isBid, price: f.price, quantity: f.quantity, fee: f.fee, feeAsset: f.feeAsset, role: f.role })),
 		openingBase: OPENING_BASE,
 		openingBasis: OPENING_BASIS ?? 0,
 		closingMid,
@@ -154,8 +166,11 @@ async function main() {
 	console.log('|---|---|')
 	console.log(`| Matched base (bought AND sold) | ${spread.matchedBase} DEEP |`)
 	console.log(`| Realized spread, gross | ${spread.grossRealizedSui.toFixed(9)} SUI |`)
-	console.log(`| Maker fees in SUI | ${spread.feeSui.toFixed(9)} SUI |`)
-	console.log(`| Maker fees in DEEP (reported, not converted) | ${spread.feeBase} DEEP |`)
+	console.log(`| Fees in SUI | ${spread.feeSui.toFixed(9)} SUI |`)
+	console.log(`| Fees in base (reported, not converted) | ${spread.feeBase} |`)
+	console.log(`| Fees in DEEP (reported, not converted) | ${spread.feeDeep} DEEP |`)
+	console.log(`| Fills where we were the TAKER (must be disclosed) | ${spread.takerFills} |`)
+	console.log(`| Self-matched fills (excluded) | ${spread.selfFills} |`)
 	console.log(`| **Realized spread, net** | **${spread.realizedSui.toFixed(9)} SUI** |`)
 	console.log(`| Open position at the end (not spread) | ${spread.openBase} DEEP, marked ${spread.unrealizedSui.toFixed(9)} SUI |`)
 	console.log(`| Gas, net, over ${gas.count} receipts | ${gas.netSui.toFixed(9)} SUI |`)

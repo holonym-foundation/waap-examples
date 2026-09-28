@@ -3,3 +3,5 @@ node_modules/
 state.json
 agent.pid
 logs/
+state.dry.json
+*.tmp

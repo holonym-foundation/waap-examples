@@ -1,101 +1,68 @@
 /**
  * deposit.ts — move inventory from the wallet into the BalanceManager.
  *
- * DeepBook does not trade out of your wallet. Orders are backed by balances sitting
- * inside a `BalanceManager` shared object, so the funded run needs one deposit before
- * the loop can quote anything.
+ *   DEPOSIT_SUI=0.5 DEPOSIT_DEEP=25 npm run deposit
  *
- *   DEPOSIT_SUI=25 DEPOSIT_DEEP=0 npm run deposit
+ * DeepBook orders are backed by balances inside a `BalanceManager`, not by the wallet.
+ * Amounts are human units (0.5 means 0.5 SUI). Both coins go in one PTB.
  *
- * Amounts are human units — 25 means 25 SUI, not 25 MIST. The SDK applies the coin
- * scalar (`depositIntoManager(managerKey, coinKey, amountToDeposit: number)`,
- * `node_modules/@mysten/deepbook-v3/dist/transactions/balanceManager.d.mts:38`).
- *
- * Both deposits go into ONE PTB, so the two coins move under one policy decision
- * rather than two. It leaves through the same `signAndSendTx` as the loop, which
- * means the same dry-run guard: nothing is signed unless AGENT_DRY_RUN=0.
- *
- * The manager has to exist first. Run this after the first `npm run dev` tick has
- * created one — see README §Dry run to live.
+ * The manager must exist first (the agent's first live tick creates it — README step 3).
+ * Deposit takes the same lock as the loop, so it cannot run while the loop is quoting,
+ * resolves the manager the same way (state and environment must agree), and records its
+ * intent before sending. If a run is still open (a crash left it unfinished), the deposit
+ * is recorded as a transfer so the run's drawdown is not flattered by the top-up.
  */
 import { Transaction } from '@mysten/sui/transactions'
 
-import {
-	AGENT_ID,
-	DRY_RUN,
-	MANAGER_KEY,
-	NETWORK,
-	POOL,
-	POOL_KEY,
-	STATE_FILE,
-	buildKindBytes,
-	fatal,
-	log,
-	makeDeepBookClient,
-	readBalanceManagerId,
-	resolveOwner,
-	signAndSendTx,
-} from './lib/waap.ts'
+import { openContext } from './lib/context.ts'
+import { reconcilePending, sendWithIntent } from './lib/ops.ts'
+import { AGENT_ID, DRY_RUN, MANAGER_KEY, NETWORK, POOL, POOL_KEY, buildKindBytes, fatal, log, makeDeepBookClient } from './lib/waap.ts'
 
 if (!POOL) {
 	console.error(`[${AGENT_ID}] unknown POOL_KEY ${POOL_KEY} on ${NETWORK}`)
 	process.exit(1)
 }
 
-/** `DEPOSIT_DEEP` and `DEPOSIT_SUI` for the DEEP/SUI pool — one per side of the book. */
 function amountFor(coinKey: string): number {
-	const raw = process.env[`DEPOSIT_${coinKey.toUpperCase()}`]
-	const n = Number(raw ?? '0')
+	const n = Number(process.env[`DEPOSIT_${coinKey.toUpperCase()}`] ?? '0')
 	return Number.isFinite(n) && n > 0 ? n : 0
 }
 
 async function main(): Promise<void> {
-	const owner = await resolveOwner()
-	const balanceManagerId = readBalanceManagerId()
+	const ctx = await openContext({ purpose: 'deposit' })
+	const managerId = ctx.state.balanceManagerId
+	const deposits = [POOL.baseCoin, POOL.quoteCoin].map((coinKey) => ({ coinKey, amount: amountFor(coinKey) })).filter((d) => d.amount > 0)
+	log('event', 'deposit_start', { network: NETWORK, poolKey: POOL_KEY, balanceManagerId: managerId ?? null, deposits, dryRun: DRY_RUN, owner: ctx.owner, runId: ctx.state.runId ?? null })
 
-	const deposits = [POOL.baseCoin, POOL.quoteCoin]
-		.map((coinKey) => ({ coinKey, amount: amountFor(coinKey) }))
-		.filter((d) => d.amount > 0)
-
-	log('event', 'deposit_start', {
-		network: NETWORK,
-		poolKey: POOL_KEY,
-		balanceManagerId: balanceManagerId ?? null,
-		deposits,
-		dryRun: DRY_RUN,
-		owner,
-	})
-
-	if (!balanceManagerId) {
-		log('error', 'balance_manager_missing', {
-			stateFile: STATE_FILE,
-			note: 'deposit needs an existing manager: set DEEPBOOK_BALANCE_MANAGER_ID, or run one `npm run dev` tick first so the agent creates and persists one',
-		})
+	if (!managerId) {
+		log('error', 'balance_manager_missing', { note: 'create the manager first: AGENT_DRY_RUN=0 MAX_TICKS=1 ./node_modules/.bin/tsx agent.ts' })
 		process.exit(1)
 	}
 	if (deposits.length === 0) {
-		log('error', 'nothing_to_deposit', {
-			note: `set DEPOSIT_${POOL.baseCoin} and/or DEPOSIT_${POOL.quoteCoin} to a positive amount in human units`,
-		})
+		log('error', 'nothing_to_deposit', { note: `set DEPOSIT_${POOL.baseCoin} and/or DEPOSIT_${POOL.quoteCoin} in human units` })
 		process.exit(1)
 	}
 
-	const db = makeDeepBookClient(owner, balanceManagerId)
+	const db = makeDeepBookClient(ctx.owner, managerId)
 	const tx = new Transaction()
-	for (const d of deposits) {
-		tx.add(db.balanceManager.depositIntoManager(MANAGER_KEY, d.coinKey, d.amount))
-	}
-
-	const b64 = await buildKindBytes(tx, 'deposit', {
-		balanceManagerId,
-		deposits,
-		coins: deposits.length,
-	})
+	for (const d of deposits) tx.add(db.balanceManager.depositIntoManager(MANAGER_KEY, d.coinKey, d.amount))
+	const b64 = await buildKindBytes(tx, 'deposit', { balanceManagerId: managerId, deposits })
 	if (!b64) process.exit(1)
 
-	const digest = await signAndSendTx(b64, 'deposit')
-	if (digest) log('event', 'tx_submitted', { kind: 'deposit', digest, deposits })
-	log('event', 'deposit_done', { dryRun: DRY_RUN, digest: digest ?? null })
+	const out = await sendWithIntent(ctx, { kind: 'deposit', b64, runId: ctx.state.runId, proc: 'deposit' })
+	if (out.status === 'submitted' && ctx.state.runId) {
+		const base = deposits.find((d) => d.coinKey === POOL.baseCoin)?.amount ?? 0
+		const quote = deposits.find((d) => d.coinKey === POOL.quoteCoin)?.amount ?? 0
+		ctx.state.transfers = [...(ctx.state.transfers ?? []), { atMs: Date.now(), base, quote, digest: out.digest }]
+		ctx.save()
+	}
+	if (out.status === 'submitted') {
+		await new Promise((r) => setTimeout(r, 3_000))
+		await reconcilePending(ctx)
+	}
+	log('event', 'deposit_done', { dryRun: DRY_RUN, outcome: out.status, digest: out.status === 'submitted' ? out.digest : null })
+	ctx.lock.release()
+	process.exit(out.status === 'submitted' || out.status === 'dry_run' ? 0 : 1)
 }
 
 main().catch(fatal)

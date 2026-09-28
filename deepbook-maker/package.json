@@ -10,7 +10,7 @@
 		"stop": "tsx stop.ts",
 		"refuse-probe": "tsx refuse-probe.ts",
 		"measure": "tsx build-dryrun.ts",
-		"test": "node --test --import tsx lib/quotes.test.ts lib/events.test.ts lib/fills.test.ts lib/receipts.test.ts lib/spread.test.ts lib/policy.test.ts lib/waap.test.ts lib/smoke.test.ts",
+		"test": "node --test --import tsx lib/*.test.ts",
 		"typecheck": "tsc --noEmit",
 		"measure:shapes": "tsx measure-shapes.ts",
 		"receipts": "tsx receipts.ts",

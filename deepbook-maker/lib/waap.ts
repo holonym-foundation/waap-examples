@@ -73,7 +73,6 @@ export const POOL_KEY = process.env.POOL_KEY ?? 'DEEP_SUI'
 
 export const ENV_BALANCE_MANAGER_ID = process.env.DEEPBOOK_BALANCE_MANAGER_ID?.trim() || undefined
 
-export const STATE_FILE = path.resolve(process.env.STATE_FILE ?? './state.json')
 const LOG_FILE = path.resolve(process.env.AGENT_LOG_FILE ?? `./logs/${AGENT_ID}.jsonl`)
 // ./logs is not created by `npm init`. appendFileSync throws ENOENT on a missing
 // directory and the logger swallows it, so the symptom would be silence.
@@ -81,6 +80,14 @@ fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true })
 
 /** Default ON. Going live requires AGENT_DRY_RUN=0 explicitly. */
 export const DRY_RUN = process.env.AGENT_DRY_RUN !== '0'
+
+/**
+ * Live and dry runs never share a state file: a dry run's simulated orders and zero
+ * budgets must not be read back by a live run (the rotator mixed them). The mode is also
+ * part of the state's identity, so pointing both at one file fails loudly.
+ */
+export const STATE_FILE = path.resolve(process.env.STATE_FILE ?? (DRY_RUN ? './state.dry.json' : './state.json'))
+export const RUN_MODE: 'live' | 'dry' = DRY_RUN ? 'dry' : 'live'
 
 /** The SDK addresses a BalanceManager by key, not by id. One manager, one key. */
 export const MANAGER_KEY = 'MAKER'
@@ -508,24 +515,6 @@ export async function buildKindBytes(
 }
 
 // -----------------------------------------------------------------------------
-// The BalanceManager id, shared by every script
-// -----------------------------------------------------------------------------
-
-/**
- * `DEEPBOOK_BALANCE_MANAGER_ID` wins over `state.json`, so an operator can point a
- * one-shot script at a specific manager without editing state.
- */
-export function readBalanceManagerId(): string | undefined {
-	if (ENV_BALANCE_MANAGER_ID) return ENV_BALANCE_MANAGER_ID
-	try {
-		const parsed = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as { balanceManagerId?: string }
-		return parsed.balanceManagerId?.trim() || undefined
-	} catch {
-		return undefined
-	}
-}
-
-// -----------------------------------------------------------------------------
 // Read-only chain queries the measurement paths need
 // -----------------------------------------------------------------------------
 
@@ -604,4 +593,22 @@ export async function fetchReceipt(digest: string, attempts = 4): Promise<RpcRec
 		}
 	}
 	return null
+}
+
+/**
+ * Our address's transactions since `sinceMs`, newest first, with the client order ids of
+ * every `OrderPlaced` they emitted — the evidence `resolveUnknown` needs. `complete` is
+ * false when the page ran out before reaching `sinceMs`.
+ */
+export async function recentOwnerTxs(owner: string, sinceMs: number, limit = 50): Promise<{ txs: Array<{ digest: string; timestampMs: number; clientOrderIds: string[] }>; complete: boolean }> {
+	const page = (await withRpc('queryTransactionBlocks:owner', () =>
+		sui.queryTransactionBlocks({ filter: { FromAddress: owner }, options: { showEvents: true }, order: 'descending', limit }),
+	)) as unknown as { data: Array<{ digest: string; timestampMs?: string; events?: Array<{ type: string; parsedJson?: Record<string, unknown> }> }>; hasNextPage?: boolean }
+	const txs = page.data.map((t) => ({
+		digest: t.digest,
+		timestampMs: Number(t.timestampMs ?? 0),
+		clientOrderIds: (t.events ?? []).filter((e) => e.type.endsWith('::order_info::OrderPlaced')).map((e) => String(e.parsedJson?.client_order_id ?? '')),
+	}))
+	const oldest = txs.at(-1)?.timestampMs ?? 0
+	return { txs, complete: !page.hasNextPage || oldest < sinceMs }
 }

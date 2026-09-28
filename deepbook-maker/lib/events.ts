@@ -68,6 +68,8 @@ export interface ParseOptions extends PoolScalars {
 	poolId?: string
 	/** Keep only events for this BalanceManager. Omit to keep every manager. */
 	balanceManagerId?: string
+	/** DEEP's scalar, for fees paid in DEEP. Defaults to 1e6. */
+	deepScalar?: number
 }
 
 /** An order DeepBook actually put on the book, in human units. */
@@ -95,20 +97,42 @@ export interface CanceledOrder {
 	balanceManagerId: string
 }
 
-/** A fill, seen from the side that had the resting order. */
+/** Which asset a fee was charged in. */
+export type FeeAsset = 'DEEP' | 'base' | 'quote'
+
+/**
+ * A fill that involved OUR manager, from our side.
+ *
+ * `role` says which side of the match we were on:
+ *   - `maker` — our resting order was crossed. Our side is `!taker_is_bid`; our fee is
+ *     `maker_fee`.
+ *   - `taker` — our order crossed someone else's. Our side IS `taker_is_bid`; our fee is
+ *     `taker_fee`. With post-only orders this should never happen, and the loop stops
+ *     quoting when it does — but the accounting must still get the direction right.
+ *   - `self` — our manager is on both sides. Economically a wash apart from fees; it is
+ *     flagged and never counted as a trade.
+ *
+ * Fees: `fee_is_deep` means DEEP (scaled by the DEEP scalar). Otherwise the fee is taken
+ * in the order's input asset — quote for a bid, base for an ask — which is DeepBook v3's
+ * "input token fee" rule. That rule is not exercised on DEEP/SUI (whitelisted, zero fee);
+ * the fee-bearing path is covered only by synthetic tests.
+ */
 export interface Fill {
+	role: 'maker' | 'taker' | 'self'
+	/** Our order's u128 id on this fill (maker order id when we were maker, taker's when taker). */
+	ownOrderId: string
 	/** The resting (maker) order's u128 id. */
 	makerOrderId: string
-	/**
-	 * The side of the *maker* order — which is us. The event reports `taker_is_bid`,
-	 * so the maker sold when the taker bought: `isBid = !taker_is_bid`.
-	 */
+	/** OUR side: true when we bought base. */
 	isBid: boolean
 	price: number
 	/** Base filled, human units. */
 	quantity: number
 	/** Quote moved, human units. */
 	quoteQuantity: number
+	/** Our fee on this fill, human units of `feeAsset`. 0 on the whitelisted DEEP/SUI pool. */
+	fee: number
+	feeAsset: FeeAsset
 	poolId: string
 	makerBalanceManagerId: string
 	takerBalanceManagerId: string
@@ -228,24 +252,44 @@ export function parseOrderCanceled(tx: RpcTransactionBlock | null | undefined, o
  *      taker_balance_manager_id, taker_client_order_id, taker_fee, taker_fee_is_deep,
  *      taker_is_bid, taker_order_id, timestamp }`
  *
- * `balanceManagerId` in the options filters on the MAKER manager, because that is the
- * role this agent plays.
+ * With `balanceManagerId` set, keeps every fill where that manager is the maker, the
+ * taker or both, and reports it from that manager's side (see `Fill`). Without it, keeps
+ * every fill in the pool from the maker's side.
  */
 export function parseOrderFilled(tx: RpcTransactionBlock | null | undefined, opts: ParseOptions): Fill[] {
 	const out: Fill[] = []
+	const deepScalar = opts.deepScalar ?? 1e6
 	for (const e of eventsOf(tx)) {
 		if (!isEventType(e.type, '::order_info::OrderFilled')) continue
 		const f = fieldsOf(e)
-		if (!matches(f, 'maker_balance_manager_id', opts)) continue
+		if (opts.poolId && str(f.pool_id) !== opts.poolId) continue
+		const maker = str(f.maker_balance_manager_id)
+		const taker = str(f.taker_balance_manager_id)
+		const ours = opts.balanceManagerId
+		const isMaker = ours ? maker === ours : true
+		const isTaker = ours ? taker === ours : false
+		if (!isMaker && !isTaker) continue
+		const role: Fill['role'] = isMaker && isTaker ? 'self' : isMaker ? 'maker' : 'taker'
+		const takerIsBid = f.taker_is_bid === true
+		// Our side. As maker we are opposite the taker; as taker we ARE the taker.
+		const isBid = role === 'taker' ? takerIsBid : !takerIsBid
+		const rawFee = role === 'taker' ? f.taker_fee : f.maker_fee
+		const feeIsDeep = (role === 'taker' ? f.taker_fee_is_deep : f.maker_fee_is_deep) === true
+		const feeAsset: FeeAsset = feeIsDeep ? 'DEEP' : isBid ? 'quote' : 'base'
+		const feeScalar = feeAsset === 'DEEP' ? deepScalar : feeAsset === 'quote' ? opts.quoteScalar : opts.baseScalar
 		out.push({
+			role,
+			ownOrderId: str(role === 'taker' ? f.taker_order_id : f.maker_order_id),
 			makerOrderId: str(f.maker_order_id),
-			isBid: f.taker_is_bid !== true,
+			isBid,
 			price: priceToHuman(str(f.price), opts),
 			quantity: quantityToHuman(str(f.base_quantity), opts.baseScalar),
 			quoteQuantity: quantityToHuman(str(f.quote_quantity), opts.quoteScalar),
+			fee: quantityToHuman(str(rawFee ?? '0') || '0', feeScalar),
+			feeAsset,
 			poolId: str(f.pool_id),
-			makerBalanceManagerId: str(f.maker_balance_manager_id),
-			takerBalanceManagerId: str(f.taker_balance_manager_id),
+			makerBalanceManagerId: maker,
+			takerBalanceManagerId: taker,
 			timestampMs: str(f.timestamp),
 		})
 	}

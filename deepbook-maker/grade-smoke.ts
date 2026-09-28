@@ -1,13 +1,13 @@
 /**
  * grade-smoke — grade a live smoke run from its log and the chain.
  *
- *   AGENT_LOG_FILE=./logs/smoke.jsonl PID_FILE=./agent.pid npm run -s grade:smoke
+ *   AGENT_LOG_FILE=./logs/smoke.jsonl npm run -s grade:smoke [-- <runId>]
  *
- * Run it after the stop sequence (SIGTERM, then `stop.ts`). It reads every digest the
- * log submitted (deposit, requotes, stop), fetches each receipt with its gas budget,
- * reads the manager's open orders and balances, and hands everything to `gradeSmoke()`
- * in `lib/smoke.ts`, where the rules live. Exit code: 0 for PASS or
- * PASS_WITH_DISCLOSED_EXCEPTION, 1 for FAIL.
+ * Run it after the loop has exited (its own cleanup, or `npm run stop`). It reads every
+ * digest the run submitted, fetches each receipt with its gas budget, reads the manager's
+ * open orders, settled balances and manager balances ITSELF (independent of the log), checks
+ * the process lock is gone, and hands everything to `gradeSmoke()` in `lib/smoke.ts`,
+ * where the rules live. Exit code: 0 for PASS or PASS_WITH_DISCLOSED_EXCEPTION, 1 for FAIL.
  *
  * Read-only: `sui_getTransactionBlock` and DeepBook reads. Nothing is signed, waap-cli
  * is never invoked, and the log is never modified.
@@ -17,10 +17,11 @@ import path from 'node:path'
 
 import { gradeSmoke, type LogLine, type SmokeReceipt } from './lib/smoke.ts'
 import { parseGasUsed } from './lib/receipts.ts'
-import { MANAGER_KEY, POOL_KEY, makeDeepBookClient, readBalanceManagerId, sui, withRpc } from './lib/waap.ts'
+import { readResiduals } from './lib/ops.ts'
+import { defaultLockDir, lockKey, lockPathFor } from './lib/lock.ts'
+import { sui, withRpc } from './lib/waap.ts'
 
 const LOG = process.env.AGENT_LOG_FILE ?? './logs/deepbook-maker.jsonl'
-const PID_FILE = path.resolve(process.env.PID_FILE ?? './agent.pid')
 const HERE = path.dirname(new URL(import.meta.url).pathname)
 
 function readLines(file: string): LogLine[] {
@@ -63,7 +64,7 @@ async function main(): Promise<void> {
 	const lines = readLines(LOG)
 	const digests = new Set<string>()
 	for (const l of lines) {
-		if ((l.message === 'tx_submitted' || l.message === 'stop_done') && typeof l['digest'] === 'string') digests.add(l['digest'] as string)
+		if ((l.message === 'tx_submitted' || l.message === 'cleanup_confirmed') && typeof l['digest'] === 'string') digests.add(l['digest'] as string)
 	}
 	const receipts: Record<string, SmokeReceipt> = {}
 	for (const d of digests) {
@@ -71,35 +72,20 @@ async function main(): Promise<void> {
 		if (r) receipts[d] = r
 	}
 
-	const start = lines.find((l) => l.message === 'agent_start')
+	const runId = process.argv[2] ?? (lines.filter((l) => l.message === 'agent_start').at(-1)?.['runId'] as string | undefined)
+	const start = lines.find((l) => l.message === 'agent_start' && l['runId'] === runId)
+	// Identity comes from the run's own agent_start, never from the local environment.
 	const owner = String(start?.['owner'] ?? '')
-	const managerId = (start?.['balanceManagerId'] as string | undefined) ?? readBalanceManagerId()
-	const stopDone = [...lines].reverse().find((l) => l.message === 'stop_done')
-
-	let openOrders: string[] | undefined
-	let managerBase: number | undefined
-	let managerQuote: number | undefined
-	if (owner && managerId) {
-		const db = makeDeepBookClient(owner, managerId)
-		try {
-			openOrders = (await withRpc('accountOpenOrders:grade', () => db.accountOpenOrders(POOL_KEY, MANAGER_KEY))).map(String)
-		} catch {}
-		try {
-			managerBase = (await withRpc('balance:base:grade', () => db.checkManagerBalance(MANAGER_KEY, 'DEEP'))).balance
-			managerQuote = (await withRpc('balance:quote:grade', () => db.checkManagerBalance(MANAGER_KEY, 'SUI'))).balance
-		} catch {}
-	}
+	const managerId = start?.['balanceManagerId'] as string | undefined
+	const residuals = owner && managerId ? await readResiduals(owner, managerId) : {}
+	const key = lockKey(owner, String(start?.['network'] ?? ''), String(start?.['poolKey'] ?? ''))
+	const lockPresent = !!owner && fs.existsSync(lockPathFor(defaultLockDir(), key))
 
 	const grade = gradeSmoke({
 		lines,
+		runId,
 		receipts,
-		afterStop: {
-			stopDigest: stopDone?.['digest'] as string | undefined,
-			openOrders,
-			managerBase,
-			managerQuote,
-			pidFilePresent: fs.existsSync(PID_FILE),
-		},
+		finalCheck: { ...residuals, atMs: Date.now(), lockPresent },
 		codeSetsGasBudget: codeSetsGasBudget(),
 	})
 
