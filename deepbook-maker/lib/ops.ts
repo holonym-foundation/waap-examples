@@ -10,7 +10,7 @@ import { classifySendFailure, makeOpId, resolveUnknown, type PendingKind, type P
 import { addCleanup } from './ptb.ts'
 import { parseGasUsed } from './receipts.ts'
 import { residualFailures, type Residuals } from './smoke.ts'
-import { DRY_RUN, MANAGER_KEY, POOL, POOL_KEY, buildKindBytes, fetchReceipt, log, makeDeepBookClient, recentOwnerTxs, signAndSendTx, sui, withRpc } from './waap.ts'
+import { cliErrorEvent, getLastSendTxResult, DRY_RUN, MANAGER_KEY, POOL, POOL_KEY, buildKindBytes, fetchReceipt, log, makeDeepBookClient, recentOwnerTxs, signAndSendTx, sui, withRpc } from './waap.ts'
 
 export const GAS_CAPS: GasCaps = {
 	capMist: Math.round(Number(process.env.GAS_CAP_SUI ?? '0.15') * MIST_PER_SUI),
@@ -58,7 +58,13 @@ export async function sendWithIntent(ctx: Context, args: { kind: PendingKind; b6
 		log('event', 'tx_submitted', { kind: args.kind, digest, opId: op.opId, runId: args.runId, proc: args.proc, balanceManagerId: state.balanceManagerId })
 		return { status: 'submitted', digest, op }
 	} catch (err) {
-		const error = err instanceof Error ? err.message : String(err)
+		// Classify from what waap-cli itself said, not execa's message: that begins with the
+		// whole command line (the base64 transaction), which pushed the CLI's answer out of the
+		// logged text on 28 Sep and left a refusal classified as unknown.
+		const r = getLastSendTxResult()
+		const cli = cliErrorEvent([r?.stdout, r?.stderr].filter(Boolean).join('\n'))
+		const execaMsg = err instanceof Error ? err.message : String(err)
+		const error = [cli ? `${cli.code ?? ''}: ${cli.message ?? ''}` : '', r?.stderr ?? '', r?.stdout ?? '', execaMsg.replace(/--tx '[^']*'/, "--tx '<b64>'")].filter(Boolean).join(' | ')
 		if (classifySendFailure(error) === 'not_submitted') {
 			state.pending = state.pending.filter((p) => p.opId !== op.opId)
 			ctx.save()
@@ -66,7 +72,7 @@ export async function sendWithIntent(ctx: Context, args: { kind: PendingKind; b6
 			return { status: 'not_submitted', error }
 		}
 		op.status = 'unknown'
-		op.lastError = error.slice(0, 300)
+		op.lastError = error.slice(0, 1000)
 		ctx.save()
 		log('error', 'send_outcome_unknown', { opId: op.opId, kind: op.kind, runId: args.runId, error: op.lastError, note: 'quoting blocked until chain evidence resolves it; nothing is resent' })
 		return { status: 'unknown', error, op }
