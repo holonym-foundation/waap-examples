@@ -84,6 +84,17 @@ are set — so a rebuild cannot drift). The corollary for anything added later: 
 a DeepBookClient across a function boundary, pass a getter. Every such signature in
 `agent.ts` is `GetDb = () => DeepBookClient` for this reason.
 
+*What a rotation does not reset.* The JSON-RPC transport calls `options.fetch ?? fetch`
+(`dist/jsonRpc/http-transport.mjs`), and Node's global `fetch` keeps one connection pool
+for the whole process, so a new client after a rotation still used the same sockets. In
+live run 2b (28 Sep, 15:45–15:50Z) the long-lived process got `fetch failed` from both
+endpoints for four ticks while a fresh Node process reached them. The log kept only
+undici's opaque message, so the underlying cause is not known. `lib/waap.ts` now gives
+the client its own undici `Agent` (connect 10 s, headers and body 30 s), replaces it on
+every endpoint failure before the retry (`rpc_connections_recycled`), and logs the error's
+`cause` chain on `rpc_retry` and `tick_failed`, so the next outage records its cause.
+`lib/rpc-pool.test.ts` checks the recycle against a local server.
+
 ---
 
 ## B. `@mysten/deepbook-v3` 2.4.1

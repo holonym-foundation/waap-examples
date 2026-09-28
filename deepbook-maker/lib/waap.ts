@@ -16,9 +16,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { DeepBookClient, FLOAT_SCALAR, mainnetCoins, mainnetPools, testnetCoins, testnetPools } from '@mysten/deepbook-v3'
-import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc'
+import { JsonRpcHTTPTransport, SuiJsonRpcClient } from '@mysten/sui/jsonRpc'
 import { Transaction } from '@mysten/sui/transactions'
 import { execa } from 'execa'
+import { Agent, fetch as undiciFetch } from 'undici'
 
 import type { PoolScalars } from './events.ts'
 import type { EventCursor, EventPage, QueryEvents } from './fills.ts'
@@ -318,6 +319,29 @@ export async function resolveOwner(): Promise<string> {
 // -----------------------------------------------------------------------------
 
 /**
+ * The HTTP connection pool behind every RPC read, and why it is ours.
+ *
+ * The SDK's transport calls `options.fetch ?? fetch` (`dist/jsonRpc/http-transport.mjs`),
+ * and Node's global `fetch` keeps ONE connection pool for the whole process. Rotating to
+ * a new `SuiJsonRpcClient` therefore never touched a single socket. Live run 2b
+ * (28 Sep, 15:45–15:50Z): four ticks got `fetch failed` from both endpoints while a fresh
+ * Node process on the same Mac reached them — the signature of process-local state. The
+ * exact cause was not recorded (the log kept only undici's opaque message; `rpc_retry`
+ * now keeps `cause`). So on every endpoint failure the pool is replaced before the
+ * retry, and requests are bounded (connect 10 s, headers and body 30 s each) instead of
+ * undici's 300 s defaults. `rpcFetch` reads `rpcAgent` per request, so a DeepBookClient
+ * built before a recycle uses the fresh pool too.
+ */
+const newRpcAgent = () => new Agent({ connect: { timeout: 10_000 }, headersTimeout: 30_000, bodyTimeout: 30_000 })
+let rpcAgent = newRpcAgent()
+const rpcFetch = ((input: string | URL | Request, init?: RequestInit) =>
+	undiciFetch(input as Parameters<typeof undiciFetch>[0], { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher: rpcAgent })) as unknown as typeof fetch
+
+function newSuiClient(url: string): SuiJsonRpcClient {
+	return new SuiJsonRpcClient({ transport: new JsonRpcHTTPTransport({ url, fetch: rpcFetch }), network: NETWORK })
+}
+
+/**
  * The Sui client. `let`, not `const`, because a dead endpoint is rotated away from at
  * runtime — and an ES module export is a live binding, so `import { sui }` in
  * `agent.ts` sees the replacement without any re-import.
@@ -326,7 +350,27 @@ export async function resolveOwner(): Promise<string> {
  * after a rotation. That is exactly the DeepBookClient, which takes `client` in its
  * constructor: use `onRpcRotated` to rebuild it. See `withRpc`.
  */
-export let sui = new SuiJsonRpcClient({ url: RPC_ENDPOINTS[0], network: NETWORK })
+export let sui = newSuiClient(RPC_ENDPOINTS[0])
+
+/** Replace the connection pool; the old one finishes in-flight requests, then closes. */
+export function recycleRpcConnections(reason: string): void {
+	const old = rpcAgent
+	rpcAgent = newRpcAgent()
+	old.close().catch(() => {})
+	log('event', 'rpc_connections_recycled', { reason })
+}
+
+/** The chain of `cause`s under an error (undici hides the real one: UND_ERR_*, ECONNRESET, EMFILE…). */
+export function errorCause(err: unknown): string | null {
+	const parts: string[] = []
+	let c = (err as { cause?: unknown })?.cause
+	for (let i = 0; c && i < 4; i++) {
+		const e = c as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown }
+		parts.push([e.code, e.name, e.message].filter((x) => x !== undefined && x !== '').join(' ') || String(c))
+		c = e.cause
+	}
+	return parts.length ? parts.join(' <- ').slice(0, 300) : null
+}
 
 let rpcIndex = 0
 
@@ -368,7 +412,7 @@ export function rotateRpc(): boolean {
 	const from = currentRpcUrl()
 	rpcIndex = (rpcIndex + 1) % RPC_ENDPOINTS.length
 	const to = currentRpcUrl()
-	sui = new SuiJsonRpcClient({ url: to, network: NETWORK })
+	sui = newSuiClient(to)
 	log('event', 'rpc_rotated', { from, to })
 	for (const fn of rotationListeners) {
 		try {
@@ -466,12 +510,14 @@ export async function withRpc<T>(
 				attempt,
 				host: hostOf(currentRpcUrl()),
 				error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+				cause: errorCause(err),
 				op,
 				attempts,
 				endpointFailure: endpointFault,
 			})
 			// An error about the request, not about the node: no retry, no rotation.
 			if (!endpointFault) throw err
+			recycleRpcConnections(`${op}: ${(err instanceof Error ? err.message : String(err)).slice(0, 80)}`)
 			rotateRpc()
 			await sleep(backoff[Math.min(attempt, backoff.length) - 1])
 		}

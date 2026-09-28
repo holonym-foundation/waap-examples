@@ -48,6 +48,7 @@ import {
 	headCursor,
 	buildKindBytes,
 	currentRpcUrl,
+	errorCause,
 	fatal,
 	getSendTxCalls,
 	getSendTxRefused,
@@ -667,7 +668,7 @@ async function main(): Promise<void> {
 				break
 			}
 			consecutiveErrors++
-			L('error', 'tick_failed', { error: err instanceof Error ? err.message : String(err), consecutiveErrors })
+			L('error', 'tick_failed', { error: err instanceof Error ? err.message : String(err), cause: errorCause(err), consecutiveErrors })
 			if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
 				L('error', 'too_many_consecutive_errors', { consecutiveErrors })
 				stopping = 'too_many_consecutive_errors'
