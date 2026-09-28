@@ -49,7 +49,9 @@ async function main(): Promise<void> {
 	try {
 		ctx = await open()
 	} catch (err) {
-		if (!(err instanceof LockHeldError) || err.status !== 'live' || !err.holder) throw err
+		// Hand off only to a live LOOP: it cleans up on SIGTERM. A deposit, probe or another
+		// stop has no handler and would die mid-send (review #6).
+		if (!(err instanceof LockHeldError) || err.status !== 'live' || !err.holder || err.holder.purpose !== 'loop') throw err
 		// A live loop on this machine: ask it to stop and clean up, and wait for it.
 		log('event', 'stop_handoff', { pid: err.holder.pid, purpose: err.holder.purpose, note: 'sent SIGTERM; waiting for the loop to finish its tick, clean up and release the lock' })
 		process.kill(err.holder.pid, 'SIGTERM')

@@ -89,11 +89,11 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 
 1. **Log in and fund.** `waap-cli login`, then `waap-cli whoami --json` for the Sui address. Fund that address with the base and quote you intend to quote, plus a gas and cleanup reserve.
 2. **Set your daily spend limit.** `waap-cli policy set --daily-spend-limit <usd>`. The limit is a threshold that asks for your approval, not a hard cap. If you need a hard boundary, use a separate account funded with only what should be on the book.
-3. **Create the BalanceManager.** Run `AGENT_DRY_RUN=0 MAX_TICKS=1 ./node_modules/.bin/tsx agent.ts`. One live tick creates the manager, writes its id to `state.json` and quotes nothing. The run then exits through cleanup; an empty manager needs no transaction.
+3. **Create the BalanceManager.** Run `AGENT_DRY_RUN=0 MAX_TICKS=1 ./node_modules/.bin/tsx agent.ts`. One live tick creates the manager, writes its id to `state.json` and quotes nothing. The run then exits through cleanup. An empty manager normally needs no transaction; if the create's receipt is still pending, one cleanup transaction is sent.
 4. **Deposit.** For example, `AGENT_DRY_RUN=0 DEPOSIT_SUI=0.6 DEPOSIT_DEEP=30 npm run deposit`. SUI only also works: the agent bids until fills bring base into the band.
 5. **Run the loop, directly.** `AGENT_DRY_RUN=0 MAX_RUN_MIN=60 ./node_modules/.bin/tsx agent.ts`. Do not launch a long run through `npm run`: on Linux, npm does not pass SIGTERM on, so stopping npm can leave the agent quoting.
 6. **Stop.** Use any one of these:
-   - Ctrl-C or SIGTERM the agent. It finishes the tick, stops quoting, then runs cancel → settle → withdraw and checks the chain. That check is no open order, no settled balance and an empty manager. Only then does it exit.
+   - Ctrl-C or SIGTERM the agent. It finishes the tick (the in-flight `waap-cli` call runs in its own process group, so Ctrl-C does not interrupt a signature), stops quoting, then runs cancel → settle → withdraw and checks the chain. That check is no open order, no settled balance and an empty manager. Only then does it exit.
    - `AGENT_DRY_RUN=0 npm run stop`. On the same machine as a live loop, this signals the loop and waits for its cleanup, then verifies. After a crash, it runs the cleanup itself; add `-- --break-stale-lock` if the dead loop left its lock.
    - From another machine, set `DEEPBOOK_BALANCE_MANAGER_ID=0x… AGENT_DRY_RUN=0 npm run stop`. The login gives the owner; the manager id must be supplied.
 
@@ -106,7 +106,7 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 | Two processes on one account and pool | An atomic lock (`open wx`) keyed on account, network and pool, under `LOCK_DIR`. A live holder refuses the second process. A dead one is taken over only with `--break-stale-lock`. Single host: a local file cannot stop a second machine. |
 | Which manager | State and `DEEPBOOK_BALANCE_MANAGER_ID` must agree. If they disagree, every script refuses. Missing state next to a configured manager is refused unless `ADOPT_MANAGER=1`, which starts a new run with fresh budgets. |
 | State | Versioned and identity-bound: owner, network, pool, and live or dry mode. Written atomically. A corrupt or unwritable file stops the loop; it is never silently reset. Fills, cursor and budgets are saved in one write. |
-| A send whose result is unknown | Intent, gas reservation and client order ids are saved before signing. An unknown outcome blocks quoting and is never resent. It resolves only on transaction evidence; an empty book is not evidence. Cleanup, which is idempotent, is still allowed. |
+| A send whose result is unknown | Intent, gas reservation and client order ids are saved before signing. An unknown outcome blocks quoting and is never resent. It resolves only on transaction evidence; an empty book is not evidence. Where no evidence can be found automatically, `npm run recover` records an operator's explorer check: `attach` a digest after its sender is verified, or declare `not-executed`, which charges the full reservation. Cleanup, which is idempotent, is still allowed, and a later verified cleanup supersedes earlier unknown ones. |
 | Restart | Fills are backfilled from the saved cursor before quoting resumes. `FILL_SKIP_GAP=1` skips the backfill and marks the run's turnover and P&L incomplete. |
 | Gas | Consumed gas only goes up: rebates never add capacity. Reservations are held until each receipt is counted. Cleanup has its own allowance beyond the cap. |
 
@@ -117,6 +117,7 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 | `./node_modules/.bin/tsx agent.ts` | The loop |
 | `npm run deposit` | Wallet → BalanceManager (`DEPOSIT_SUI`, `DEPOSIT_DEEP`) |
 | `npm run stop` | Cancel → settle → withdraw, verified; hands off to a live loop |
+| `npm run recover` | List pending operations; `attach <opId> <digest>` or `not-executed <opId> --checked-explorer` |
 | `npm test` / `npm run typecheck` | Unit tests (no network) / `tsc --noEmit` over every script |
 | `./stop-check.sh` | Dry rehearsal of launch, lock and stop |
 | `npm run fills` | Walk the chain's `OrderFilled` events for this manager up to confirmed cleanup, and print spread against gas, with fees and taker/self fills |
@@ -153,7 +154,7 @@ Every variable, with its default and reason, is in `.env.example`.
 | Path | What |
 |---|---|
 | `agent.ts` | The loop |
-| `deposit.ts`, `stop.ts`, `refuse-probe.ts` | One-shot senders, all through `lib/context.ts` (lock, state, manager) |
+| `deposit.ts`, `stop.ts`, `refuse-probe.ts`, `recover.ts` | One-shot scripts, all through `lib/context.ts` (lock, state, manager) |
 | `lib/strategy.ts`, `lib/costs.ts`, `lib/scenario.ts` | The maker, its cost model, an offline decision simulator |
 | `lib/state.ts`, `lib/lock.ts`, `lib/identity.ts`, `lib/pending.ts`, `lib/budget.ts` | Durable state, the lock, one manager, sends with intent, budgets |
 | `lib/ops.ts`, `lib/ptb.ts` | Sending, receipts and cleanup; the exact transaction commands |

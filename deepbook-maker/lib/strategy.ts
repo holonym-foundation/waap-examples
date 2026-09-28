@@ -250,6 +250,9 @@ export function planStrategy(input: StrategyInput, cfg: StrategyConfig = DEFAULT
 		s = { bidCap: Math.min(s.bidCap, s2.bidCap), askCap: Math.min(s.askCap, s2.askCap), bidQty: Math.min(s.bidQty, s2.bidQty), askQty: Math.min(s.askQty, s2.askQty) }
 		quotable.bid = quotable.bid && bidOk(s.bidQty)
 		quotable.ask = quotable.ask && bidOk(s.askQty)
+		// Widening can drop a side; the one-sided rule (8) must hold again for what is left.
+		if (quotable.bid && !quotable.ask && deviation >= 0) quotable.bid = false
+		if (quotable.ask && !quotable.bid && deviation <= 0) quotable.ask = false
 		if (!quotable.bid && !quotable.ask) return stop('inventory_limited', 'sizes_fell_below_min_at_gated_spread', base)
 		q = qFor()
 		reqBps = requiredSpreadBps(q, mid, cost.totalSui, feeRate)

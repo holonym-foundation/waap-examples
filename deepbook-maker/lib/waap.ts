@@ -214,7 +214,9 @@ export async function signAndSendTx(b64TxBytes: string, kind: string): Promise<s
 		const res = await execa(
 			'waap-cli',
 			['send-tx', '--tx', b64TxBytes, '--tx-format', 'base64', '--chain', `sui:${NETWORK}`, '--json'],
-			{ timeout: 120_000 },
+			// `detached`: its own process group, so a terminal Ctrl-C reaches the agent (which
+			// finishes the tick) and not the in-flight signing call (review #7).
+			{ timeout: 120_000, detached: true },
 		)
 		stdout = res.stdout
 		lastSendTxStdout = stdout
@@ -611,4 +613,14 @@ export async function recentOwnerTxs(owner: string, sinceMs: number, limit = 50)
 	}))
 	const oldest = txs.at(-1)?.timestampMs ?? 0
 	return { txs, complete: !page.hasNextPage || oldest < sinceMs }
+}
+
+/**
+ * The cursor of the newest event of `eventType` — a start point for a walk that must not
+ * begin at the oldest event on chain (what a null cursor with ascending order does).
+ */
+export async function headCursor(eventType: string): Promise<EventCursor | null> {
+	const page = await queryEventsPage({ filter: { MoveEventType: eventType }, limit: 1, descending: true })
+	const e = page.data?.[0]
+	return e?.id?.txDigest ? { txDigest: e.id.txDigest, eventSeq: String(e.id.eventSeq) } : null
 }

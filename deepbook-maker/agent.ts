@@ -27,7 +27,7 @@ import { addTurnover, evaluateLimits, MIST_PER_SUI, pruneTurnover, rollingTurnov
 import { openContext, type Context } from './lib/context.ts'
 import { DEFAULT_CYCLE } from './lib/costs.ts'
 import { findCreatedBalanceManagerId, parseOrderCanceled, parseOrderPlaced, type RpcTransactionBlock } from './lib/events.ts'
-import { FillLedger, walkFills, type CollectedFill } from './lib/fills.ts'
+import { FillLedger, ORDER_FILLED_TYPE, walkFills, type CollectedFill } from './lib/fills.ts'
 import { GAS_CAPS, GasBudgetError, RESERVE_PER_TX_MIST, reconcilePending, runCleanup, sendWithIntent } from './lib/ops.ts'
 import { blocksQuoting, makeClientOrderId } from './lib/pending.ts'
 import { addPlaceOrder } from './lib/ptb.ts'
@@ -45,6 +45,7 @@ import {
 	STATE_FILE,
 	SUI_RPC,
 	anchorCursorAt,
+	headCursor,
 	buildKindBytes,
 	currentRpcUrl,
 	fatal,
@@ -191,14 +192,28 @@ async function readParams(db: GetDb): Promise<void> {
 	}
 }
 
-async function readChainOrders(db: GetDb): Promise<ChainOrder[] | undefined> {
+async function readChainOrders(db: GetDb): Promise<Array<ChainOrder & { expiresAtMs?: number }> | undefined> {
 	try {
 		const ids = (await withRpc('accountOpenOrders', () => db().accountOpenOrders(POOL_KEY, MANAGER_KEY))).map(String)
 		const details = await withRpc('getAccountOrderDetails', () => db().getAccountOrderDetails(POOL_KEY, MANAGER_KEY))
-		const left = new Map((details ?? []).map((d) => [String(d.order_id), (Number(d.quantity) - Number(d.filled_quantity)) / SCALARS.baseScalar]))
+		const byId = new Map((details ?? []).map((d) => [String(d.order_id), d]))
 		const known = new Map(ctx.state.resting.map((o) => [o.orderId, o.quantity]))
-		// `getAccountOrderDetails` returns [] on failure; an id with no detail keeps what we believed.
-		return ids.map((orderId) => ({ orderId, remaining: left.get(orderId) ?? known.get(orderId) ?? 0 }))
+		// `getAccountOrderDetails` returns [] on failure. An open id we know nothing about and
+		// have no detail for cannot be sized — treat the read as failed rather than drop it
+		// (review #10).
+		const blind = ids.filter((id) => !byId.has(id) && !known.has(id))
+		if (blind.length) {
+			L('warn', 'open_orders_detail_missing', { ids: blind, note: 'orders on chain we cannot size; pausing rather than ignoring them' })
+			return undefined
+		}
+		return ids.map((orderId) => {
+			const d = byId.get(orderId) as { quantity?: unknown; filled_quantity?: unknown; expire_timestamp?: unknown } | undefined
+			return {
+				orderId,
+				remaining: d ? (Number(d.quantity) - Number(d.filled_quantity)) / SCALARS.baseScalar : (known.get(orderId) ?? 0),
+				expiresAtMs: d?.expire_timestamp !== undefined ? Number(d.expire_timestamp) : undefined,
+			}
+		})
 	} catch (err) {
 		L('warn', 'open_orders_read_failed', { error: String(err).slice(0, 200) })
 		return undefined
@@ -223,7 +238,7 @@ async function readInventory(db: GetDb): Promise<{ free: { base: number; quote: 
 async function fetchTx(digest: string): Promise<RpcTransactionBlock | null> {
 	for (let i = 0; i < 6; i++) {
 		try {
-			return (await withRpc('getTransactionBlock', () => sui.getTransactionBlock({ digest, options: { showEvents: true, showObjectChanges: true } }), { attempts: 2, backoffMs: [1_000, 1_000] })) as unknown as RpcTransactionBlock
+			return (await withRpc('getTransactionBlock', () => sui.getTransactionBlock({ digest, options: { showEvents: true, showObjectChanges: true, showEffects: true } }), { attempts: 2, backoffMs: [1_000, 1_000] })) as unknown as RpcTransactionBlock
 		} catch {
 			await new Promise((r) => setTimeout(r, 1000 * (i + 1)))
 		}
@@ -243,6 +258,14 @@ function logFill(f: CollectedFill, tick: number) {
 async function scanFills(tick: number, managerId: string): Promise<'caught_up' | 'behind' | 'failed'> {
 	const s = ctx.state
 	try {
+		// Never walk from a null cursor: ascending from null starts at the OLDEST event on
+		// chain and would keep quoting paused all run (review #4). Take the head instead.
+		if (!s.fills.cursor) {
+			s.fills.cursor = await headCursor(ORDER_FILLED_TYPE)
+			ctx.save()
+			L('warn', 'fill_cursor', { source: 'head', cursor: s.fills.cursor, note: 'no anchor; fills before this point are not covered — `npm run fills` recovers them offline' })
+			if (!s.fills.cursor) return 'failed'
+		}
 		const res = await walkFills({ query: queryFillEvents, cursor: s.fills.cursor, opts: { ...SCALARS, poolId: POOL.address, balanceManagerId: managerId }, ledger: fillLedger, limit: FILL_PAGE_SIZE, maxPages: FILL_SCAN_PAGES })
 		for (const f of res.fills) {
 			s.fills.ledger.push(f)
@@ -306,6 +329,24 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 	// nothing. Dry: show the create bytes, then plan against DRY_RUN_* inventory so a first
 	// dry run still shows what the maker would quote.
 	if (!managerId) {
+		// A create already in flight is never sent again: recover its id from the digest, or
+		// wait (unknown) — review #2. Only with no create pending is a new one built.
+		const pendingCreate = s.pending.find((p) => p.kind === 'create_manager')
+		if (pendingCreate) {
+			if (pendingCreate.digest) {
+				const id = findCreatedBalanceManagerId(await fetchTx(pendingCreate.digest))
+				if (id) {
+					s.balanceManagerId = id
+					ctx.save()
+					L('event', 'balance_manager_created', { tick: n, digest: pendingCreate.digest, balanceManagerId: id, stateFile: STATE_FILE, recovered: true })
+					await reconcilePending(ctx, { runId, tick: n })
+				} else L('warn', 'balance_manager_not_found', { tick: n, digest: pendingCreate.digest, note: 'will re-read next tick; no second create is sent' })
+			} else {
+				await reconcilePending(ctx, { runId, tick: n })
+				L('warn', 'create_manager_unknown', { tick: n, opId: pendingCreate.opId, note: 'no second create is sent; resolve with `npm run recover`' })
+			}
+			return
+		}
 		L('event', 'balance_manager_missing', { tick: n, stateFile: STATE_FILE, note: DRY_RUN ? 'dry run: building the create transaction, then planning against DRY_RUN_* inventory' : 'building a create transaction; not quoting this tick' })
 		const tx = new Transaction()
 		tx.add(db().balanceManager.createAndShareBalanceManager())
@@ -318,8 +359,10 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 				s.balanceManagerId = id
 				ctx.save()
 				L('event', 'balance_manager_created', { tick: n, digest: out.digest, balanceManagerId: id, stateFile: STATE_FILE })
-			} else L('warn', 'balance_manager_not_found', { tick: n, digest: out.digest })
-			await reconcilePending(ctx, { runId, tick: n })
+				// Fold the receipt only once the id is safely in state; until then the pending
+				// op is what stops a second create.
+				await reconcilePending(ctx, { runId, tick: n })
+			} else L('warn', 'balance_manager_not_found', { tick: n, digest: out.digest, note: 'will re-read next tick; no second create is sent' })
 		}
 		if (!DRY_RUN) return
 	}
@@ -340,7 +383,9 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 			const r = reconcileResting(s.resting, chain, PRICE_DIVISOR)
 			if (r.dropped.length || r.adopted.length || r.resized.length) L('event', 'resting_reconciled', { tick: n, dropped: r.dropped, adopted: r.adopted, resized: r.resized })
 			const prev = new Map(s.resting.map((o) => [o.orderId, o]))
-			s.resting = r.resting.map((o) => ({ ...prev.get(o.orderId), ...o }))
+			const exp = new Map(chain.map((c) => [c.orderId, c.expiresAtMs]))
+			// Adopted orders keep the chain's expiry so the near-expiry refresh still applies.
+			s.resting = r.resting.map((o) => ({ ...prev.get(o.orderId), ...o, expiresAtMs: prev.get(o.orderId)?.expiresAtMs ?? exp.get(o.orderId) }))
 			if (s.recovery?.requires.includes('reconcile_orders')) s.recovery.requires = s.recovery.requires.filter((x) => x !== 'reconcile_orders')
 		}
 	}
@@ -386,7 +431,7 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 				? `pending_unknown:${unknown.map((p) => p.opId).join(',')}`
 				: s.recovery
 					? `recovery:${s.recovery.reason}`
-					: fillState !== 'caught_up' && !s.fillsIncompleteSinceMs
+					: fillState !== 'caught_up'
 						? `fills_${fillState === 'behind' ? 'backfilling' : 'scan_failed'}`
 						: limit.action === 'pause'
 							? limit.reason
@@ -466,27 +511,31 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 	if (!b64) return
 
 	const out = await sendWithIntent(ctx, { kind: 'requote', b64, clientOrderIds, runId, proc: 'loop' })
-	const kept = s.resting.filter((o) => !plan.cancels.includes(o.orderId))
 	if (out.status === 'dry_run') {
+		const kept = s.resting.filter((o) => !plan.cancels.includes(o.orderId))
 		s.resting = [...kept, ...plan.place.map((o, i) => ({ orderId: `t${n}-${o.isBid ? 'bid' : 'ask'}-${i}`, ...o, simulated: true, placedAtMs: placedAt, expiresAtMs: placedAt + STRATEGY.orderTtlMs }))]
 		ctx.save()
 		return
 	}
 	if (out.status !== 'submitted') return
 
-	// (10) Read our own transaction back for the real order ids.
+	// (10) Read our own transaction back for the real order ids. Until the chain confirms
+	// a cancel, the order stays in our resting set (review #13): an aborted or unread
+	// transaction cancelled nothing, and a later pause must still cancel it.
 	const txb = await fetchTx(out.digest)
-	if (!txb) {
-		L('warn', 'orders_unconfirmed', { tick: n, digest: out.digest, note: 'the next tick reconciles against the chain' })
-		s.resting = kept
-		ctx.save()
+	const status = (txb as unknown as { effects?: { status?: { status?: string; error?: string } } } | null)?.effects?.status
+	if (!txb || status?.status !== 'success') {
+		L('warn', txb ? 'requote_failed_on_chain' : 'orders_unconfirmed', { tick: n, digest: out.digest, error: status?.error ?? null, note: 'resting set unchanged; the next tick reconciles against the chain' })
+		await reconcilePending(ctx, { runId, tick: n })
 		return
 	}
 	const opts = { ...SCALARS, poolId: POOL.address, balanceManagerId: managerId }
 	const placed = parseOrderPlaced(txb, opts)
 	const canceled = new Set(parseOrderCanceled(txb, opts).map((c) => c.orderId))
+	// `cancelLiveOrder` no-ops on an order that already filled, so an id asked to cancel but
+	// absent from OrderCanceled is left for the chain reconcile to drop or keep.
 	s.resting = [
-		...kept.filter((o) => !canceled.has(o.orderId)),
+		...s.resting.filter((o) => !canceled.has(o.orderId)),
 		...placed.map((o): TrackedOrder => ({ orderId: o.orderId, isBid: o.isBid, price: o.price, quantity: o.quantity, simulated: false, placedAtMs: placedAt, expiresAtMs: placedAt + STRATEGY.orderTtlMs })),
 	]
 	ctx.save()
@@ -526,12 +575,12 @@ async function prepareFills(): Promise<void> {
 	}
 	const anchorAtMs = Date.now() - 120_000
 	try {
-		s.fills.cursor = await anchorCursorAt(anchorAtMs)
+		s.fills.cursor = (await anchorCursorAt(anchorAtMs)) ?? (await headCursor(ORDER_FILLED_TYPE))
 		ctx.save()
 		L('info', 'fill_cursor', { source: 'anchor', anchorAt: new Date(anchorAtMs).toISOString(), cursor: s.fills.cursor })
 	} catch (err) {
 		if (err instanceof StateError) throw err
-		L('warn', 'fill_cursor_failed', { error: String(err).slice(0, 200), note: 'the first scan starts from the head; fills before it are not covered' })
+		L('warn', 'fill_cursor_failed', { error: String(err).slice(0, 200), note: 'the first scan takes the head cursor; fills before it are not covered' })
 	}
 }
 
@@ -554,10 +603,12 @@ async function main(): Promise<void> {
 	validateConfig()
 	ctx = await openContext({ purpose: 'loop', adopt: ADOPT_MANAGER, breakStale: BREAK_STALE_LOCK })
 	const s = ctx.state
-	runStartMs = Date.now()
 	const resumed = !!s.runId
-	runId = s.runId ?? `run-${runStartMs}`
+	runId = s.runId ?? `run-${Date.now()}`
 	s.runId = runId
+	// A resumed run keeps its start, so MAX_RUN_MIN counts across restarts (review #12).
+	s.runStartedAtMs ??= Date.now()
+	runStartMs = s.runStartedAtMs
 	ctx.save()
 
 	L('event', 'agent_start', {

@@ -8,6 +8,7 @@
 		"dev": "tsx agent.ts",
 		"deposit": "tsx deposit.ts",
 		"stop": "tsx stop.ts",
+		"recover": "tsx recover.ts",
 		"refuse-probe": "tsx refuse-probe.ts",
 		"measure": "tsx build-dryrun.ts",
 		"test": "node --test --import tsx lib/*.test.ts",

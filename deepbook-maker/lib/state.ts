@@ -82,6 +82,8 @@ export interface AgentStateV2 {
 	balanceManagerId?: string
 	/** The current run. A run starts at `agent_start` and ends at confirmed cleanup. */
 	runId?: string
+	/** When the current run first started; kept across restarts so run limits count from it. */
+	runStartedAtMs?: number
 	tick: number
 	lastMid?: number
 	resting: TrackedOrder[]

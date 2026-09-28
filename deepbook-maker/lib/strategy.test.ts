@@ -262,3 +262,24 @@ test('scenario one-sided start (SUI only): bids until a fill brings base in, the
 	assert.deepEqual(steps[0].plan.place.map((o) => o.isBid), [true])
 	assert.ok(steps.slice(3).some((s) => s.plan.place.some((o) => !o.isBid)), 'an ask appears once fills bring base inside the band')
 })
+
+test('review #5: when widening drops the ask of a long-base book, the lone bid is not placed', () => {
+	// Asymmetric band: just above target, the ask's room to BAND_LOW is small while the
+	// bid's room to BAND_HIGH is large. Widening can push the ask cap under the pool
+	// minimum and leave a bid that ADDS base to a book that is already long.
+	const cfg = { ...DEFAULT_STRATEGY, bandLow: 0.45, bandHigh: 0.95 }
+	const book = { bestBid: MID * 0.994, bestAsk: MID * 1.006, readAtMs: 1_000_000 }
+	let checked = 0
+	for (let base = 20; base <= 400; base += 1) {
+		for (let quote = 0.1; quote <= 8; quote += 0.02) {
+			const V = base * MID + quote
+			const f = (base * MID) / V
+			const p = planStrategy(input({ inv: { free: { base, quote }, locked: { base: 0, quote: 0 } }, book }), cfg)
+			if (p.place.length !== 1) continue
+			checked++
+			if (p.place[0].isBid) assert.ok(f < cfg.targetBaseFraction + 1e-9, `lone bid placed at f ${f.toFixed(4)} (base ${base}, quote ${quote.toFixed(2)})`)
+			else assert.ok(f > cfg.targetBaseFraction - 1e-9, `lone ask placed at f ${f.toFixed(4)}`)
+		}
+	}
+	assert.ok(checked > 0)
+})

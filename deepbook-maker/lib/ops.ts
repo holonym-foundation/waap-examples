@@ -150,6 +150,7 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 	const recipient = args.recipient ?? owner
 	if (!managerId) {
 		log('info', 'cleanup_not_needed', { runId: args.runId, proc: args.proc, reason: 'no manager' })
+		if (DRY_RUN) closeRun(ctx, args.runId)
 		return { ok: true, alreadyClean: true }
 	}
 	log('event', 'cleanup_started', { runId: args.runId, proc: args.proc, reason: args.reason, recipient, ...idFields })
@@ -179,6 +180,8 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 	}
 	if (out.status === 'dry_run') {
 		log('info', 'cleanup_dry_run', { runId: args.runId, proc: args.proc, note: 'cancel → settle → withdraw built; nothing sent in a dry run' })
+		// A dry run's state never carries a run into the next dry run (review #11).
+		closeRun(ctx, args.runId)
 		return { ok: true }
 	}
 	if (out.status !== 'submitted') {
@@ -205,6 +208,17 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 		if (isClean(residuals)) break
 	}
 	const failures = residualFailures('residuals', residuals)
+	if (!failures.length && receiptOk) {
+		// Earlier cleanups whose outcome was unknown are now moot: cleanup only ever withdraws
+		// everything, and the chain is verified empty. Their gas is unknown, so each one's full
+		// reservation is counted as consumed — never zero (review #1).
+		for (const p of state.pending.filter((x) => x.kind === 'cleanup' && x.status !== 'submitted')) {
+			state.budget = foldReceipt(state.budget, { netMist: p.reservedGasMist, status: 'unknown' })
+			state.pending = state.pending.filter((x) => x.opId !== p.opId)
+			log('event', 'op_superseded', { opId: p.opId, by: out.digest, chargedMist: p.reservedGasMist, note: 'unknown cleanup superseded by a verified cleanup; its reservation is counted as spent' })
+		}
+		ctx.save()
+	}
 	if (!receiptOk || failures.length) {
 		log('error', 'cleanup_failed', { runId: args.runId, proc: args.proc, stage: 'verify', digest: out.digest, receiptOk, residuals, residualsReadAt: residuals.readAt, failures, ...idFields, instruction: 'rerun `npm run stop`; if it persists, inspect the manager on an explorer' })
 		return { ok: false, digest: out.digest }
@@ -231,6 +245,8 @@ function closeRun(ctx: Context, runId: string | undefined, digest?: string) {
 		s.closedRuns = [...(s.closedRuns ?? []), { runId: runId ?? s.runId!, closedAtMs: Date.now(), budget: s.budget, cleanupDigest: digest }].slice(-20)
 		s.runId = undefined
 		s.startValuation = undefined
+		s.runStartedAtMs = undefined
+		s.fillsIncompleteSinceMs = undefined
 		s.transfers = []
 		s.budget = { ...s.budget, gasConsumedMist: 0, gasNetMist: 0, receipts: 0, failedReceipts: 0 }
 	}

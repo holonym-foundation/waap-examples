@@ -3,7 +3,7 @@
  *
  * ## Gas: consumed and reserved are two different numbers
  *
- * - `gasConsumedMist` is cumulative and monotonic. A receipt adds `max(0, net)`; a failed
+ * - `gasConsumedMist` is cumulative and monotonic within a run. A receipt adds `max(0, net)`; a failed
  *   transaction adds what it was charged. Nothing ever subtracts from it: a storage
  *   rebate is real money back, but it does not buy more permission to spend, and
  *   completing an operation never resets what that operation consumed.
@@ -31,8 +31,10 @@
  * Manager value (base × mark + quote, all of it: free, locked and settled, each once)
  * against its value when the run's budgets started. It excludes gas, so it is called
  * *inventory drawdown*, not "loss". The full-run P&L is a separate ledger (`collect-fills`).
- * Deposits and withdrawals cannot happen inside a run — they need the same process lock
- * the loop holds — so the start valuation is not moved by transfers.
+ * Deposits cannot happen while the loop runs (they need its lock), but a run can stay open
+ * across a crash and restart. A deposit made then, after the start valuation, is recorded
+ * as a transfer (`state.transfers`) and added to the start value, so a top-up cannot hide a
+ * loss. Budgets are per run: confirmed cleanup archives them and the next run starts at zero.
  */
 import type { PendingOp } from './pending.ts'
 

@@ -31,10 +31,10 @@ import {
 	log,
 	makeDeepBookClient,
 	resolveOwner,
-	signAndSendTx,
 } from './lib/waap.ts'
 import { classifyProbeResponse } from './lib/policy.ts'
 import { openContext } from './lib/context.ts'
+import { sendWithIntent } from './lib/ops.ts'
 
 if (!POOL) {
 	console.error(`[${AGENT_ID}] unknown POOL_KEY ${POOL_KEY} on ${NETWORK}`)
@@ -84,14 +84,13 @@ async function main(): Promise<void> {
 	})
 	if (!b64) process.exit(1)
 
+	// Through `sendWithIntent` like every sender (review #9): if the policy lets it through,
+	// it is a real deposit and is recorded with its gas. A refusal is the expected answer.
 	let digest: string | null = null
 	let error: string | null = null
-	try {
-		digest = await signAndSendTx(b64, 'refuse_probe')
-	} catch (err) {
-		// A refusal may well come back as a non-zero exit. That is the answer, not a bug.
-		error = err instanceof Error ? err.message : String(err)
-	}
+	const out = await sendWithIntent(ctx, { kind: 'deposit', b64, runId: ctx.state.runId, proc: 'deposit' })
+	if (out.status === 'submitted') digest = out.digest
+	else if (out.status !== 'dry_run') error = out.error
 
 	// Both channels, whatever the exit code. A refusal that exits nonzero used to lose
 	// its stdout entirely — see `lib/waap.ts` `lastSendTxStdout`.
