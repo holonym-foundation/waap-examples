@@ -133,6 +133,27 @@ test('every send, refused or not, counts against sendTxCalls', () => {
 	assert.equal(waap.getSendTxCalls(), 6)
 })
 
+test('a deposit that loses its response retains amounts saved before the CLI ran', async () => {
+	const { sendWithIntent } = await import('./ops.ts')
+	const { newState } = await import('./state.ts')
+	const identity = { owner: '0xabc', network: 'mainnet', poolKey: 'DEEP_SUI', poolId: '0xpool', mode: 'live' as const }
+	const state = newState(identity, '0x123')
+	const file = path.join(TMP, 'deposit-state.json')
+	const deposit = { base: 10, quote: 0.6, adjustDrawdown: true }
+	const cli = path.join(BIN, 'waap-cli')
+	// The stand-in reads the persisted intent before simulating a lost response.
+	fs.writeFileSync(cli, `#!/bin/sh\nif ! grep -q '"adjustDrawdown":true' '${file}'; then echo 'deposit metadata missing' >&2; exit 1; fi\necho 'timeout after submission' >&2\nexit 1\n`)
+	fs.chmodSync(cli, 0o755)
+	const ctx = { owner: identity.owner, identity, state, save: () => fs.writeFileSync(file, JSON.stringify(state)) } as import('./context.ts').Context
+	const out = await sendWithIntent(ctx, { kind: 'deposit', b64: 'AAAA', deposit, runId: 'run-1', proc: 'deposit' })
+	assert.equal(out.status, 'unknown')
+	if (out.status === 'unknown') assert.match(out.error, /timeout after submission/)
+	const persisted = JSON.parse(fs.readFileSync(file, 'utf8'))
+	assert.deepEqual(persisted.pending[0].deposit, deposit)
+	assert.equal(persisted.pending[0].status, 'unknown')
+	assert.equal(persisted.transfers, undefined, 'submission alone must not affect drawdown')
+})
+
 test.after(() => {
 	fs.rmSync(TMP, { recursive: true, force: true })
 })

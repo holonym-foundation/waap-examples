@@ -52,15 +52,14 @@ async function main(): Promise<void> {
 	const b64 = await buildKindBytes(tx, 'deposit', { balanceManagerId: managerId, deposits })
 	if (!b64) process.exit(1)
 
-	const out = await sendWithIntent(ctx, { kind: 'deposit', b64, runId: ctx.state.runId, proc: 'deposit' })
-	// Only a deposit AFTER the run's starting value was measured is a transfer; one before it
-	// is already inside that value (review #8).
-	if (out.status === 'submitted' && ctx.state.runId && ctx.state.startValuation) {
-		const base = deposits.find((d) => d.coinKey === POOL.baseCoin)?.amount ?? 0
-		const quote = deposits.find((d) => d.coinKey === POOL.quoteCoin)?.amount ?? 0
-		ctx.state.transfers = [...(ctx.state.transfers ?? []), { atMs: Date.now(), base, quote, digest: out.digest }]
-		ctx.save()
+	// Store the amounts before signing, including whether the run already has a baseline.
+	// reconcilePending applies the transfer only after a successful receipt, also on recovery.
+	const deposit = {
+		base: deposits.find((d) => d.coinKey === POOL.baseCoin)?.amount ?? 0,
+		quote: deposits.find((d) => d.coinKey === POOL.quoteCoin)?.amount ?? 0,
+		adjustDrawdown: !!(ctx.state.runId && ctx.state.startValuation),
 	}
+	const out = await sendWithIntent(ctx, { kind: 'deposit', b64, deposit, runId: ctx.state.runId, proc: 'deposit' })
 	if (out.status === 'submitted') {
 		await new Promise((r) => setTimeout(r, 3_000))
 		await reconcilePending(ctx)

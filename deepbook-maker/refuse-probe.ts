@@ -88,7 +88,10 @@ async function main(): Promise<void> {
 	// it is a real deposit and is recorded with its gas. A refusal is the expected answer.
 	let digest: string | null = null
 	let error: string | null = null
-	const out = await sendWithIntent(ctx, { kind: 'deposit', b64, runId: ctx.state.runId, proc: 'deposit' })
+	const out = await sendWithIntent(ctx, {
+		kind: 'deposit', b64, runId: ctx.state.runId, proc: 'deposit',
+		deposit: { base: 0, quote: PROBE_SUI, adjustDrawdown: !!(ctx.state.runId && ctx.state.startValuation) },
+	})
 	if (out.status === 'submitted') digest = out.digest
 	else if (out.status !== 'dry_run') error = out.error
 

@@ -374,7 +374,8 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 		if (!DRY_RUN) return
 	}
 
-	// (3) Pending sends: fold receipts, try to resolve unknowns. Unknown blocks quoting.
+	// (3) Pending sends: fold receipts, try to resolve unknowns. Deposits also block until
+	// their receipts and drawdown adjustments are recorded.
 	await reconcilePending(ctx, { runId, tick: n })
 
 	// (4) Fills, then book/fee parameters, then the chain's view of our orders.
@@ -435,7 +436,7 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 		: !ordersRead
 			? 'orders_unreadable'
 			: unknown.length
-				? `pending_unknown:${unknown.map((p) => p.opId).join(',')}`
+				? `pending_unresolved:${unknown.map((p) => p.opId).join(',')}`
 				: s.recovery
 					? `recovery:${s.recovery.reason}`
 					: fillState !== 'caught_up'
@@ -481,8 +482,8 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 	if (inventoryLimitedTicks >= INVENTORY_LIMITED_EXIT_TICKS) haltReason ??= 'inventory_limited'
 	// A halt is executed by the main loop as cleanup; nothing more to send here.
 	if (plan.mode === 'halt') return
-	// An unknown send blocks every new send, cancels included: cleanup is the only
-	// transaction allowed while an outcome is unknown, and it runs on exit.
+	// Unknown sends and deposits awaiting receipts block new sends, cancels included:
+	// cleanup is still allowed and runs on exit.
 	if (unknown.length) return
 
 	// (8) Nothing to change: submit only if settled proceeds are waiting to be swept.

@@ -176,6 +176,29 @@ test('a resumed walk continues rather than repeating', async () => {
 	assert.equal(ledger.size, 2)
 })
 
+test('a failed later page leaves dedup unchanged and retry returns every uncommitted fill', async () => {
+	const old = fakeEvent('old', '0', 500)
+	const first = fakeEvent('first', '0', 1000)
+	const second = fakeEvent('second', '0', 2000)
+	const ledger = new FillLedger(collectFillsFromPage([old], OPTS))
+	const cursor = cursorOf(old)
+	let calls = 0
+	await assert.rejects(walkFills({
+		cursor, opts: OPTS, ledger,
+		query: async () => {
+			if (calls++) throw new Error('page two unavailable')
+			return { data: [first], nextCursor: cursorOf(first), hasNextPage: true }
+		},
+	}), /page two unavailable/)
+	assert.equal(ledger.size, 1, 'failed scan must not consume fills the caller never received')
+	const retry = fakeQuery([[old, first], [first, second]])
+	const result = await walkFills({ query: retry.query, cursor, opts: OPTS, ledger })
+	assert.equal(result.completion, 'head')
+	assert.deepEqual(result.fills.map((f) => f.txDigest), ['first', 'second'])
+	assert.deepEqual(result.cursor, cursorOf(second))
+	assert.equal(ledger.size, 3)
+})
+
 test('events from other managers are scanned but not collected', async () => {
 	const { query } = fakeQuery([[fakeEvent('d1', '0', 1000, '0xsomeone-else'), fakeEvent('d2', '0', 2000)]])
 	const res = await walkFills({ query, cursor: null, opts: OPTS })

@@ -207,7 +207,8 @@ export interface WalkResult {
  *
  * The cursor is advanced only past pages that were fully processed, so a throw
  * mid-walk leaves the caller's saved cursor pointing at un-processed events rather than
- * past them. Re-reading is safe; `FillLedger` deduplicates.
+ * past them. Dedup changes are staged until the entire walk succeeds, so retrying
+ * after a later page fails still returns the earlier pages' fills to the caller.
  */
 export async function walkFills(args: {
 	query: QueryEvents
@@ -221,6 +222,7 @@ export async function walkFills(args: {
 }): Promise<WalkResult> {
 	const { query, opts, endTimeMs } = args
 	const ledger = args.ledger ?? new FillLedger()
+	const staged = new FillLedger()
 	const limit = args.limit ?? 50
 	const maxPages = args.maxPages ?? DEFAULT_FILL_SCAN_PAGES
 
@@ -249,7 +251,7 @@ export async function walkFills(args: {
 			}
 		}
 
-		fills.push(...ledger.add(collectFillsFromPage(usable, opts)))
+		fills.push(...staged.add(collectFillsFromPage(usable, opts).filter((f) => !ledger.has(f.key))))
 		const lastTs = Number(usable.at(-1)?.timestampMs)
 		if (Number.isFinite(lastTs)) watermarkMs = lastTs
 
@@ -269,6 +271,7 @@ export async function walkFills(args: {
 		}
 	}
 
+	ledger.add(fills)
 	return {
 		fills,
 		cursor,

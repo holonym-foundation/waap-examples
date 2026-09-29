@@ -36,6 +36,8 @@ export interface PendingOp {
 	digest?: string
 	reservedGasMist: number
 	clientOrderIds: string[]
+	/** Persisted before signing so receipt recovery can account for a deposit once. */
+	deposit?: { base: number; quote: number; adjustDrawdown: boolean }
 	lastError?: string
 }
 
@@ -81,7 +83,8 @@ export function classifySendFailure(message: string): 'not_submitted' | 'unknown
 }
 
 export function blocksQuoting(pending: PendingOp[]): PendingOp[] {
-	return pending.filter((p) => p.status !== 'submitted')
+	// A deposit with a digest may still be awaiting its receipt/transfer adjustment.
+	return pending.filter((p) => p.status !== 'submitted' || p.kind === 'deposit')
 }
 
 export interface OwnerTx {

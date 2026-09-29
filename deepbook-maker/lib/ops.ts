@@ -27,7 +27,7 @@ export type SendOutcome = { status: 'dry_run' } | { status: 'submitted'; digest:
  * Persist intent → send → persist the outcome. Nothing is signed unless the intent (with
  * its reservation and client order ids) is durably on disk first.
  */
-export async function sendWithIntent(ctx: Context, args: { kind: PendingKind; b64: string; clientOrderIds?: string[]; runId?: string; proc: 'loop' | 'stop' | 'deposit' }): Promise<SendOutcome> {
+export async function sendWithIntent(ctx: Context, args: { kind: PendingKind; b64: string; clientOrderIds?: string[]; deposit?: PendingOp['deposit']; runId?: string; proc: 'loop' | 'stop' | 'deposit' }): Promise<SendOutcome> {
 	if (DRY_RUN) {
 		await signAndSendTx(args.b64, args.kind) // logs dry_run_skip, returns null
 		return { status: 'dry_run' }
@@ -45,6 +45,7 @@ export async function sendWithIntent(ctx: Context, args: { kind: PendingKind; b6
 		status: 'intent',
 		reservedGasMist: RESERVE_PER_TX_MIST,
 		clientOrderIds: args.clientOrderIds ?? [],
+		deposit: args.deposit,
 	}
 	state.pending.push(op)
 	ctx.save()
@@ -103,13 +104,21 @@ export async function reconcilePending(ctx: Context, logExtra: Record<string, un
 		}
 		if (op.digest) {
 			const g = parseGasUsed(await readReceipt(op.digest), op.digest)
-			if (!g) {
+			if (!g || (g.status !== 'success' && g.status !== 'failure')) {
 				log('warn', 'tx_gas_missing', { opId: op.opId, digest: op.digest, note: 'receipt not readable yet; reservation kept', ...logExtra })
 				continue
 			}
 			if (!canFinalizePending(op, state.balanceManagerId, g.status)) {
 				log('warn', 'create_manager_id_unresolved', { opId: op.opId, digest: op.digest, status: g.status, note: 'receipt is retained until the created manager id is persisted; inspect it with `AGENT_DRY_RUN=0 npm run recover`, then rerun setup to recover the id without sending a second create', ...logExtra })
 				continue
+			}
+			if (op.kind === 'deposit') {
+				if (g.status === 'failure') {
+					// Older versions recorded transfers at submission; undo those on failure.
+					state.transfers = (state.transfers ?? []).filter((t) => t.digest !== op.digest)
+				} else if (op.deposit?.adjustDrawdown && op.runId === state.runId && state.startValuation && !(state.transfers ?? []).some((t) => t.digest === op.digest)) {
+					state.transfers = [...(state.transfers ?? []), { atMs: op.createdAtMs, base: op.deposit.base, quote: op.deposit.quote, digest: op.digest }]
+				}
 			}
 			state.budget = foldReceipt(state.budget, { netMist: Math.round(g.netSui * MIST_PER_SUI), status: g.status })
 			state.pending = state.pending.filter((p) => p.opId !== op.opId)
@@ -148,18 +157,30 @@ export async function readResiduals(owner: string, managerId: string): Promise<R
 
 export const isClean = (r: Residuals) => residualFailures('x', r).length === 0
 
+const cleanupIO = {
+	dryRun: DRY_RUN,
+	reconcilePending,
+	readResiduals,
+	buildKindBytes,
+	sendWithIntent,
+	fetchReceipt,
+	sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+	recipientBalance: (owner: string) => sui.getBalance({ owner }).then((b) => Number(b.totalBalance) / MIST_PER_SUI).catch(() => null),
+}
+
 /**
  * cancel → settle → withdraw, then verify from chain. Used by the loop on every handled
  * exit and by `stop.ts`. Writes `cleanup_started` then `cleanup_confirmed` or
  * `cleanup_failed`, under the run's id.
  */
-export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'loop' | 'stop'; reason: string; recipient?: string }): Promise<{ ok: boolean; digest?: string; alreadyClean?: boolean }> {
+export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'loop' | 'stop'; reason: string; recipient?: string }, overrides: Partial<typeof cleanupIO> = {}): Promise<{ ok: boolean; digest?: string; alreadyClean?: boolean }> {
+	const io = { ...cleanupIO, ...overrides }
 	const { state, owner } = ctx
 	const managerId = state.balanceManagerId
 	const idFields = { owner, network: ctx.identity.network, poolKey: ctx.identity.poolKey, poolId: ctx.identity.poolId, balanceManagerId: managerId }
 	const recipient = args.recipient ?? owner
 	if (!managerId) {
-		await reconcilePending(ctx, { runId: args.runId })
+		await io.reconcilePending(ctx, { runId: args.runId })
 		if (state.pending.length) {
 			log('error', 'cleanup_failed', {
 				runId: args.runId,
@@ -171,15 +192,15 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 			return { ok: false }
 		}
 		log('info', 'cleanup_not_needed', { runId: args.runId, proc: args.proc, reason: 'no manager' })
-		if (DRY_RUN) closeRun(ctx, args.runId)
+		if (io.dryRun) closeRun(ctx, args.runId)
 		return { ok: true, alreadyClean: true }
 	}
 	log('event', 'cleanup_started', { runId: args.runId, proc: args.proc, reason: args.reason, recipient, ...idFields })
 
-	await reconcilePending(ctx, { runId: args.runId })
-	const before = await readResiduals(owner, managerId)
+	await io.reconcilePending(ctx, { runId: args.runId })
+	const before = await io.readResiduals(owner, managerId)
 	// A dry run always builds the cleanup bytes, so the rehearsal exercises the real builder.
-	if (isClean(before) && state.pending.length === 0 && !DRY_RUN) {
+	if (isClean(before) && state.pending.length === 0 && !io.dryRun) {
 		log('event', 'cleanup_verified_clean', { runId: args.runId, proc: args.proc, residuals: before, residualsReadAt: before.readAt, ...idFields, note: 'nothing to cancel or withdraw; no transaction sent' })
 		closeRun(ctx, args.runId)
 		return { ok: true, alreadyClean: true }
@@ -187,14 +208,14 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 
 	const tx = new Transaction()
 	addCleanup(tx, makeDeepBookClient(owner, managerId), { poolKey: POOL_KEY, managerKey: MANAGER_KEY, coins: [POOL.baseCoin, POOL.quoteCoin, 'DEEP'], recipient, poolAccount: before.poolAccount !== false })
-	const b64 = await buildKindBytes(tx, 'cleanup', { runId: args.runId, balanceManagerId: managerId, recipient })
+	const b64 = await io.buildKindBytes(tx, 'cleanup', { runId: args.runId, balanceManagerId: managerId, recipient })
 	if (!b64) {
 		log('error', 'cleanup_failed', { runId: args.runId, proc: args.proc, stage: 'build', ...idFields, instruction: 'rerun `npm run stop`' })
 		return { ok: false }
 	}
 	let out: SendOutcome
 	try {
-		out = await sendWithIntent(ctx, { kind: 'cleanup', b64, runId: args.runId, proc: args.proc })
+		out = await io.sendWithIntent(ctx, { kind: 'cleanup', b64, runId: args.runId, proc: args.proc })
 	} catch (err) {
 		log('error', 'cleanup_failed', { runId: args.runId, proc: args.proc, stage: 'reserve', error: String(err).slice(0, 300), ...idFields })
 		return { ok: false }
@@ -214,10 +235,10 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 	let residuals: Residuals & { readAt: string; poolAccount?: boolean } = before
 	let receiptOk = false
 	for (let i = 0; i < 6; i++) {
-		await new Promise((r) => setTimeout(r, 2_000 * (i + 1)))
-		await reconcilePending(ctx, { runId: args.runId })
+		await io.sleep(2_000 * (i + 1))
+		await io.reconcilePending(ctx, { runId: args.runId })
 		if (!receiptOk) {
-			const g = parseGasUsed(await fetchReceipt(out.digest), out.digest)
+			const g = parseGasUsed(await io.fetchReceipt(out.digest), out.digest)
 			if (g && g.status !== 'success') {
 				log('error', 'cleanup_failed', { runId: args.runId, proc: args.proc, stage: 'receipt', digest: out.digest, error: g.error ?? null, ...idFields, instruction: 'rerun `npm run stop`' })
 				return { ok: false, digest: out.digest }
@@ -225,7 +246,7 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 			receiptOk = !!g
 		}
 		if (!receiptOk) continue
-		residuals = await readResiduals(owner, managerId)
+		residuals = await io.readResiduals(owner, managerId)
 		if (isClean(residuals)) break
 	}
 	const failures = residualFailures('residuals', residuals)
@@ -244,7 +265,16 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 		log('error', 'cleanup_failed', { runId: args.runId, proc: args.proc, stage: 'verify', digest: out.digest, receiptOk, residuals, residualsReadAt: residuals.readAt, failures, ...idFields, instruction: 'rerun `npm run stop`; if it persists, inspect the manager on an explorer' })
 		return { ok: false, digest: out.digest }
 	}
-	const recipientSui = await sui.getBalance({ owner: recipient }).then((b) => Number(b.totalBalance) / MIST_PER_SUI).catch(() => null)
+	if (state.pending.length) {
+		log('error', 'cleanup_failed', {
+			runId: args.runId, proc: args.proc, stage: 'pending', digest: out.digest,
+			pending: state.pending.map((p) => ({ opId: p.opId, kind: p.kind, status: p.status, digest: p.digest ?? null })),
+			residuals, residualsReadAt: residuals.readAt, ...idFields,
+			instruction: 'resolve pending operations with `AGENT_DRY_RUN=0 npm run recover`, then rerun `AGENT_DRY_RUN=0 npm run stop`; an empty manager now does not rule out a later deposit or order',
+		})
+		return { ok: false, digest: out.digest }
+	}
+	const recipientSui = await io.recipientBalance(recipient)
 	log('event', 'cleanup_confirmed', { runId: args.runId, proc: args.proc, digest: out.digest, residuals, residualsReadAt: residuals.readAt, recipient, recipientSuiAfter: recipientSui, ...idFields })
 	closeRun(ctx, args.runId, out.digest)
 	return { ok: true, digest: out.digest }
