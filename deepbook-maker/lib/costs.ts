@@ -17,9 +17,10 @@
  * (25 Sep 6 h 55 m run, 24–25 Sep run, 27 Sep smoke at `f6bfee3`), classified by what the
  * transaction did (cancels built × places) from the run's own `tx_built` line, net =
  * computation + storage − rebate. `SIMULATED` is `devInspect` on 24 Sep against a
- * third-party manager with 9 open orders (`money-measure.md` §Result) — heavier storage
+ * third-party manager with 9 open orders, heavier storage
  * than ours, so it serves as a pessimistic bound where executed samples are thin. These
- * are historical observations, not today's prices; the loop re-measures every receipt.
+ * are historical observations, not today's prices. The loop counts every receipt against
+ * its gas cap, but this table is fixed: it is not updated from receipts.
  *
  * All figures SUI, net.
  */
@@ -85,7 +86,7 @@ export interface CycleAssumptions {
 export const DEFAULT_CYCLE: CycleAssumptions = {
 	// 25 Sep: 134 requotes for 399 DEEP ≈ 6.7 per 20-DEEP cycle at a 20-bps spread, 1-5 bps
 	// tolerance. With 50-bps tolerance and a 5-minute dwell the 24 h replay made 42
-	// requotes (money-measure.md); 3 per cycle is the working assumption, 1 and 6.7 are
+	// requotes; 3 per cycle is the working assumption, 1 and 6.7 are
 	// shown as sensitivity.
 	replacementsPerCycle: 3,
 	replaceShape: 'replace_one',

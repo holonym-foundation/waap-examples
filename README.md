@@ -191,5 +191,5 @@ npm ci
 ./node_modules/.bin/tsx agent.ts    # dry run by default
 ```
 
-A Node.js agent that quotes both sides of DeepBook's DEEP/SUI pool on Sui mainnet. It builds unsigned transactions and signs them through `waap-cli`; the agent holds no key.
+A Node.js agent that quotes both sides of DeepBook's DEEP/SUI pool on Sui mainnet. It builds unsigned transactions and signs them through `waap-cli` on a WaaP Standard mode account, so the agent process holds no key. The built-in strategy has not demonstrated profitability; mainnet results are in [`deepbook-maker/VALIDATION.md`](./deepbook-maker/VALIDATION.md).
 

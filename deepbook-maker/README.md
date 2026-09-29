@@ -1,4 +1,4 @@
-# DeepBook maker — a WaaP agent that makes a bounded market on DEEP/SUI
+# DeepBook maker: a WaaP agent that makes a bounded market on DEEP/SUI
 
 An agent that quotes both sides of [DeepBook](https://deepbook.tech)'s DEEP/SUI pool on Sui mainnet without holding a key. The account runs in WaaP Standard mode, where the signing key is held inside WaaP's enclave. Every tick the agent:
 
@@ -11,24 +11,26 @@ Walkthrough: [DeepBook Market Maker recipe](https://docs.waap.human.tech/recipes
 
 Dry run is the default. Nothing is signed unless `AGENT_DRY_RUN` is exactly `0`.
 
+The built-in strategy has not demonstrated profitability; treat it as a starting point for your own. Measured mainnet results, with every digest and a ledger you can re-derive from the chain, are in [`VALIDATION.md`](./VALIDATION.md).
+
 ## What the built-in maker does
 
-The maker quotes passive, post-only orders around the mid price. It keeps inventory inside a band and quotes only when the spread covers the gas and fees of a quoting cycle. The code is `lib/strategy.ts`, a pure function with its tests beside it.
+The maker quotes passive, post-only orders around the mid price. It keeps inventory inside a band, sizes each order to what it can back, and quotes only when the spread covers the **estimated** cost of a quoting cycle under the cost assumptions you configure. The code is `lib/strategy.ts`, a pure function with its tests beside it.
 
-- **Inventory band.** The base share of the manager's value, `f = base × mid / (base × mid + quote)`, stays between `BAND_LOW` and `BAND_HIGH` (default 20–80 %, target 50 %). Each order is sized so that `f` stays inside the band **if that order fills completely**. The opposite side is not assumed to fill. At the upper bound the maker stops bidding; at the lower bound it stops offering. Inside the band the quotes are skewed by up to `SKEW_MAX_BPS`, toward the side that brings `f` back to target.
+- **Inventory band.** The base share of the manager's value, `f = base × mid / (base × mid + quote)`, stays between `BAND_LOW` and `BAND_HIGH` (default 20 to 80 %, target 50 %). Each order is sized so that `f` stays inside the band **if that order fills completely**. The opposite side is not assumed to fill. At the upper bound the maker stops bidding; at the lower bound it stops offering. Inside the band the quotes are skewed by up to `SKEW_MAX_BPS`, toward the side that brings `f` back to target.
 - **Backed sizes.** Each side is sized to the smallest of:
   - `ORDER_SIZE`;
   - the band cap;
   - what the transaction can actually spend. That is free balance plus what cancelling our own orders on that side releases.
 
   Proceeds settled from a fill count as owned, but they cannot back an order until they are swept. A partly filled order, such as 17 DEEP left of 20, is kept rather than replaced. Below the pool minimum on both sides, the maker says so (`inventory_limited`) and says what deposit would fix it.
-- **Cost gate.** Gas on Sui is charged per transaction, not per DEEP, so a small order has to earn a wide spread. The maker widens its spread to what covers one **cycle** (a bid fill plus an ask fill of the same size) at that size. The cycle cost is the sum of the transaction shapes the cycle sends, each costed from receipts of earlier mainnet runs (`lib/costs.ts`):
+- **Cost gate.** Gas on Sui is charged per transaction, not per DEEP, so a small order has to earn a wide spread. The maker widens its spread to what covers the estimated cost of one **cycle** (a bid fill plus an ask fill of the same size) at that size. The estimate is the sum of the transaction shapes the cycle sends, each costed from a fixed table of receipts from earlier mainnet runs (`lib/costs.ts`), at the quantile and replacement count you configure (`COST_QUANTILE`, `COST_REPLACEMENTS_PER_CYCLE`):
   - two refills;
   - `COST_REPLACEMENTS_PER_CYCLE` replacements;
   - failed sends;
   - amortised setup and cleanup.
 
-  If the spread needed is above `MAX_SPREAD_BPS`, or more than `TOUCH_MULTIPLE` × the current touch spread (with our own orders excluded), the maker pauses; it never widens out of reach. A pause for cost cancels everything. A pause caused only by the liquidity rule places nothing new but keeps resting orders that still pass the keep rules (band cap, expiry, price tolerance), because an order further from the touch adds no risk. Once paused on that rule, the maker resumes placing only after `LIQUIDITY_MIN_PAUSE_MIN` (10) and when its spread is inside the rule by `LIQUIDITY_RESUME_MARGIN` (25 %). In live run 2b, without this, 12 of 15 sends were pause/resume flips; the same run replayed with it (`lib/fixtures/run-2b-touch-series.json`) sends 8 times, none a flip. The gate is re-checked on the final rounded prices. Passing it means "if both legs fill, the cycle covers its gas". It is not a profit forecast.
+  If the spread needed is above `MAX_SPREAD_BPS`, or more than `TOUCH_MULTIPLE` × the current touch spread (with our own orders excluded), the maker pauses; it never widens out of reach. A pause for cost cancels everything. A pause caused only by the liquidity rule places nothing new but keeps resting orders that still pass the keep rules (band cap, expiry, price tolerance); a held order can still be filled. Once paused on that rule, the maker resumes placing only after `LIQUIDITY_MIN_PAUSE_MIN` (10) and when its spread is inside the rule by `LIQUIDITY_RESUME_MARGIN` (25 %). In the 28 September live run, without this, 12 of 15 sends were pause/resume flips; the same run replayed offline with it (`lib/fixtures/run-2b-touch-series.json`) sends 8 times, none a flip. This change has not yet run live. The gate is re-checked on the final rounded prices. Passing it means the spread covers the *estimated* cost of one cycle if both legs fill. Actual gas can be higher than the estimate, and the gate does not predict fills; it is not a profit forecast.
 - **Discretionary replacements.** A drifted order is replaced only after it has passed `REQUOTE_TOLERANCE_BPS` **and** lived `MIN_DWELL_SEC`. Risk overrides the dwell and cancels at once. Risk means a band breach, a size above the cap, an order near expiry, a pause or a halt.
 - **Finite orders.** Orders are `POST_ONLY` (a crossing quote aborts instead of taking), cancel a self-match, and expire after `ORDER_TTL_MIN`. Expiry limits how long a crashed process's orders can trade. It does not withdraw anything; cleanup does that.
 - **Limits.** The loop halts, then cleans up, when it reaches any of these:
@@ -43,7 +45,7 @@ The maker quotes passive, post-only orders around the mid price. It keeps invent
 
 ### A worked example: why size matters more than spread
 
-Figures are from `lib/costs.ts`. Net gas per shape comes from receipts of three earlier mainnet runs of this recipe. They are historical, not today's prices; the loop re-measures every receipt.
+Figures are from `lib/costs.ts`. Net gas per shape comes from receipts of three earlier mainnet runs of this recipe. They are historical, not today's prices. The loop counts every receipt against its gas cap, but it does not update these figures.
 
 | Order size | Cycle cost, median shapes, 1 replacement | Spread needed | Cycle cost, p90 shapes, 3 replacements (default) | Spread needed |
 |---|---|---|---|---|
@@ -54,9 +56,9 @@ Figures are from `lib/costs.ts`. Net gas per shape comes from receipts of three 
 
 At mid 0.0191. The spread needed is 1e4 × cycle cost ÷ (size × mid); maker fees are 0 on DEEP/SUI.
 
-The DEEP/SUI touch spread averaged 47 bps over the 27 Sep smoke and 91 bps over the 25 Sep run, ranging from 5 to 512 bps. At 20 DEEP the default gate asks for about 270 bps, so the maker quotes only when the book is wide. At 50–100 DEEP it can sit near the touch.
+The DEEP/SUI touch spread averaged 47 bps over the 27 Sep smoke and 91 bps over the 25 Sep run, ranging from 5 to 512 bps. At 20 DEEP the default gate asks for about 270 bps, so the maker quotes only when the book is wide. At 50 to 100 DEEP it can sit near the touch.
 
-The band decides how much capital that size needs. To keep a full `q`-DEEP fill inside a 20–80 % band from a 50 % start, the manager needs about `3.3 × q × mid` SUI of value. That is 1.3 SUI for 20 DEEP, 3.2 SUI for 50 DEEP and 6.4 SUI for 100 DEEP, before a gas and cleanup reserve.
+The band decides how much capital that size needs. To keep a full `q`-DEEP fill inside a 20 to 80 % band from a 50 % start, the manager needs about `3.3 × q × mid` SUI of value. That is 1.3 SUI for 20 DEEP, 3.2 SUI for 50 DEEP and 6.4 SUI for 100 DEEP, before a gas and cleanup reserve.
 
 If only one side fills and the price then moves against the position, the band stops further same-side orders. The drawdown limit then ends the run: cancel → settle → withdraw, with the remaining inventory returned to the wallet and reported at mid. It is not sold.
 
@@ -93,11 +95,17 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 4. **Deposit.** For example, `AGENT_DRY_RUN=0 DEPOSIT_SUI=0.6 DEPOSIT_DEEP=30 npm run deposit`. SUI only also works: the agent bids until fills bring base into the band.
 5. **Run the loop, directly.** `AGENT_DRY_RUN=0 MAX_RUN_MIN=60 ./node_modules/.bin/tsx agent.ts`. Do not launch a long run through `npm run`: on Linux, npm does not pass SIGTERM on, so stopping npm can leave the agent quoting.
 6. **Stop.** Use any one of these:
-   - Ctrl-C or SIGTERM the agent. It finishes the tick (the in-flight `waap-cli` call runs in its own process group, so Ctrl-C does not interrupt a signature), stops quoting, then runs cancel → settle → withdraw and checks the chain. That check is no open order, no settled balance and an empty manager. Only then does it exit.
+   - Ctrl-C or SIGTERM the agent. It finishes the tick (the in-flight `waap-cli` call runs in its own process group, so Ctrl-C does not interrupt a signature), stops quoting, then runs cancel → settle → withdraw and checks the chain for no open order, no settled balance and an empty manager. The loop runs the same cleanup on every handled exit.
    - `AGENT_DRY_RUN=0 npm run stop`. On the same machine as a live loop, this signals the loop and waits for its cleanup, then verifies. After a crash, it runs the cleanup itself; add `-- --break-stale-lock` if the dead loop left its lock.
-   - From another machine, set `DEEPBOOK_BALANCE_MANAGER_ID=0x… AGENT_DRY_RUN=0 npm run stop`. The login gives the owner; the manager id must be supplied.
+   - From another machine: **first make sure the original loop is stopped** (the lock is a local file, so a stop on another machine cannot see or signal it). Then run `DEEPBOOK_BALANCE_MANAGER_ID=0x… AGENT_DRY_RUN=0 npm run stop`. The login gives the owner; the manager id must be supplied.
+7. **Check that cleanup succeeded.** Cleanup can fail (a refused or unknown send, a failed receipt, or residuals left on chain), and the process then exits unsuccessfully.
+   - **Success:** a `cleanup_confirmed` line (with the digest and residuals) or `cleanup_verified_clean` (the manager was already empty), then `process_exit` with `cleanupOk: true`. For `npm run stop`, `stop_done` with `ok: true` and exit code 0.
+   - **Failure:** `cleanup_failed` with a `stage` (`build`, `reserve`, `send`, `receipt`, `verify` or `exception`) and an `instruction`, or `cleanup_skipped` if the state file could not be written; then `process_exit` with `cleanupOk: false`, or `stop_done` with `ok: false`, and exit code 1.
+   - **Recover:** `AGENT_DRY_RUN=0 npm run stop`. Cleanup is idempotent, so it is safe to rerun. If a send's outcome is unknown, `AGENT_DRY_RUN=0 npm run recover` lists it for an explorer check (without `AGENT_DRY_RUN=0` it reads the dry-run state and shows nothing pending). Orders still expire on their own within `ORDER_TTL_MIN`.
 
-`./stop-check.sh` rehearses steps 5–6 as a dry run: launch, duplicate refused, stop handoff, cleanup, no survivor, lock released. It runs with a replaced environment, a temporary `HOME` and a stand-in `waap-cli` that refuses to sign. It fails if anything reached a signer.
+   The loop's exit code alone is not the success signal: an exit on a limit (gas cap, drawdown, taker fill, repeated failures) returns 1 even when its cleanup succeeded. Read `cleanupOk`.
+
+`./stop-check.sh` rehearses steps 5 and 6 as a dry run: launch, duplicate refused, stop handoff, cleanup, no survivor, lock released. It runs with a replaced environment, a temporary `HOME` and a stand-in `waap-cli` that refuses to sign. It fails if anything reached a signer.
 
 ## Safety model
 
@@ -106,7 +114,7 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 | Two processes on one account and pool | An atomic lock (`open wx`) keyed on account, network and pool, under `LOCK_DIR`. A live holder refuses the second process. A dead one is taken over only with `--break-stale-lock`. Single host: a local file cannot stop a second machine. |
 | Which manager | State and `DEEPBOOK_BALANCE_MANAGER_ID` must agree. If they disagree, every script refuses. Missing state next to a configured manager is refused unless `ADOPT_MANAGER=1`, which starts a new run with fresh budgets. |
 | State | Versioned and identity-bound: owner, network, pool, and live or dry mode. Written atomically. A corrupt or unwritable file stops the loop; it is never silently reset. Fills, cursor and budgets are saved in one write. |
-| A send whose result is unknown | Intent, gas reservation and client order ids are saved before signing. An unknown outcome blocks quoting and is never resent. It resolves only on transaction evidence; an empty book is not evidence. Where no evidence can be found automatically, `npm run recover` records an operator's explorer check: `attach` a digest after its sender is verified, or declare `not-executed`, which charges the full reservation. Cleanup, which is idempotent, is still allowed, and a later verified cleanup supersedes earlier unknown ones. |
+| A send whose result is unknown | Intent, gas reservation and client order ids are saved before signing. An unknown outcome blocks quoting and is never resent. It resolves only on transaction evidence; an empty book is not evidence. Where no evidence can be found automatically, `AGENT_DRY_RUN=0 npm run recover` records an operator's explorer check: `attach` a digest after its sender is verified, or declare `not-executed`, which charges the full reservation. Cleanup, which is idempotent, is still allowed, and a later verified cleanup supersedes earlier unknown ones. |
 | Restart | Fills are backfilled from the saved cursor before quoting resumes. `FILL_SKIP_GAP=1` skips the backfill and marks the run's turnover and P&L incomplete. |
 | Gas | Consumed gas only goes up: rebates never add capacity. Reservations are held until each receipt is counted. Cleanup has its own allowance beyond the cap. |
 
@@ -117,7 +125,7 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 | `./node_modules/.bin/tsx agent.ts` | The loop |
 | `npm run deposit` | Wallet → BalanceManager (`DEPOSIT_SUI`, `DEPOSIT_DEEP`) |
 | `npm run stop` | Cancel → settle → withdraw, verified; hands off to a live loop |
-| `npm run recover` | List pending operations; `attach <opId> <digest>` or `not-executed <opId> --checked-explorer` |
+| `AGENT_DRY_RUN=0 npm run recover` | List a live run's pending operations; `-- attach <opId> <digest>` or `-- not-executed <opId> --checked-explorer` |
 | `npm test` / `npm run typecheck` | Unit tests (no network) / `tsc --noEmit` over every script |
 | `./stop-check.sh` | Dry rehearsal of launch, lock and stop |
 | `npm run fills` | Walk the chain's `OrderFilled` events for this manager up to confirmed cleanup, and print spread against gas, with fees and taker/self fills |
@@ -130,7 +138,7 @@ Every variable, with its default and reason, is in `.env.example`.
 
 ## Known limitations
 
-- **Occasional `InsufficientGas` (waap-cli 2.2.0).** In Standard mode `waap-cli send-tx` takes the transaction kind, and WaaP's preparation step sets the gas budget just above the estimate. When state changes before execution, a requote can fail on chain. In one mainnet run this happened to 4 of 134 requotes, and in the smoke run to 2 of 11, at about 0.00018 SUI each; the next tick succeeded. The gas budget counts these failures.
+- **Occasional `InsufficientGas` (waap-cli 2.2.0).** In Standard mode `waap-cli send-tx` takes the transaction kind, and WaaP's preparation step sets the gas budget just above the estimate. When state changes before execution, a requote can fail on chain. In two mainnet runs of the previous version this happened to 4 of 134 and 2 of 11 requotes, at about 0.00018 SUI each; the next tick succeeded. None of the 16 sends in the 28 September run failed this way. The gas budget counts these failures.
 - **Fills are not predicted.** The cost gate says whether a cycle *would* cover its cost. How often DEEP/SUI takers reach a quote at a given distance from the touch is a market fact that no replay of price prints can supply.
 - **Fees in the input token.** On a fee-bearing pool, non-DEEP maker fees are taken as the order's input asset (quote for a bid, base for an ask). DEEP/SUI is whitelisted at zero fee, so that path is covered only by synthetic tests.
 - **RPC endpoints.** Mysten's public fullnode no longer serves the JSON-RPC methods the SDK uses. The default is publicnode, with suiscan as the fallback.
@@ -162,3 +170,4 @@ Every variable, with its default and reason, is in `.env.example`.
 | `lib/events.ts`, `lib/fills.ts`, `lib/spread.ts`, `lib/receipts.ts` | Event parsing (roles, fees), fill collection, FIFO spread, gas |
 | `lib/smoke.ts`, `grade-smoke.ts` | The bounded-run grade |
 | `lib/*.test.ts`, `lib/fixtures/` | Tests, several fed real mainnet transactions |
+| `VALIDATION.md`, `evidence/` | Mainnet results, the run history, and a credential-free manifest and checker that re-derive the 28 September ledger from the chain |

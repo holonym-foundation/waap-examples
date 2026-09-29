@@ -18,13 +18,15 @@
  *
  * Stop takes the same account/network/pool lock the loop holds. If a loop on this machine
  * holds it, stop sends that loop SIGTERM and waits for it to finish its tick, run its own
- * cleanup and release the lock — then verifies the result itself. If the holder is on
- * another machine, or its liveness cannot be told, stop refuses: stop that loop where it
- * runs. A dead holder's lock is taken over only with `--break-stale-lock`; pending
+ * cleanup and release the lock — then verifies the result itself. If the lock file shows a
+ * holder on another host (a shared LOCK_DIR), or its liveness cannot be told, stop refuses:
+ * stop that loop where it runs. A stop on another machine with its own LOCK_DIR cannot see
+ * the loop's lock at all, so stop the original loop first. A dead holder's lock is taken over only with `--break-stale-lock`; pending
  * operations and budgets in the state file are kept either way.
  *
  * Remote recovery (a machine without the loop's state file) needs the manager id:
- * `DEEPBOOK_BALANCE_MANAGER_ID=0x… npm run stop`. The owner comes from the WaaP login.
+ * `DEEPBOOK_BALANCE_MANAGER_ID=0x… npm run stop`, after the original loop is stopped.
+ * The owner comes from the WaaP login.
  */
 import { lockKeyFor, openContext, type Context } from './lib/context.ts'
 import { defaultLockDir, LockHeldError, lockPathFor, readHolder } from './lib/lock.ts'

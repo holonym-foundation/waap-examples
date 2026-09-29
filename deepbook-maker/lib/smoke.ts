@@ -24,7 +24,7 @@
  *   must be disclosed wherever the run is cited. Two kinds, reported separately:
  *   - `gasExceptions` — a requote failed on chain with `InsufficientGas` on a budget the
  *     WaaP preparation step set, followed by a successful requote in the same run, before
- *     quoting stopped (Arun, option A, 2026-09-27).
+ *     quoting stopped.
  *   - `lateCleanup` — cleanup was confirmed more than `lateCleanupMinutes` after quoting
  *     stopped. The run is still clean at the end; the delay is a fact about operations.
  *   - `readFailures` — ticks that failed while nothing was being sent (an RPC read outage),
@@ -173,7 +173,7 @@ export function gradeSmoke(input: SmokeInput): SmokeGrade {
 	}
 	// A failed tick is exempt only when nothing was being sent: no send intent, submission
 	// or unknown outcome since the previous tick ended. Those are disclosed, at most
-	// `maxReadFailures` per run (Arun, 2026-09-28: "your call"). Anything else FAILS.
+	// `maxReadFailures` per run. Anything else FAILS.
 	const readFailures: string[] = []
 	let sinceTick: LogLine[] = []
 	for (const l of lines) {
