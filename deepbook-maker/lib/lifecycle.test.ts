@@ -12,8 +12,9 @@ import path from 'node:path'
 import { classifyStart, loadState, newState, saveState, StateError, type StateIdentity } from './state.ts'
 import { ManagerConflictError, resolveManager } from './identity.ts'
 import { acquireLock, holderStatus, LockHeldError, lockKey, readHolder, type LockEnv } from './lock.ts'
-import { blocksQuoting, classifySendFailure, makeClientOrderId, normaliseOnLoad, resolveUnknown, type PendingOp } from './pending.ts'
+import { blocksQuoting, canFinalizePending, classifySendFailure, makeClientOrderId, normaliseOnLoad, resolveUnknown, type PendingOp } from './pending.ts'
 import { addTurnover, canReserve, emptyBudget, evaluateLimits, foldReceipt, rollingTurnover, type Limits } from './budget.ts'
+import { managerSetupTerminal, terminalExitCode } from './manager-setup.ts'
 
 const ID: StateIdentity = { owner: '0xabc', network: 'mainnet', poolKey: 'DEEP_SUI', poolId: '0xpool', mode: 'live' }
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'dbm-test-'))
@@ -183,6 +184,38 @@ test('pending: client order ids are unique across operations and fit u64', () =>
 	const b = makeClientOrderId(1_790_000_000_000, 2)
 	assert.notEqual(a, b)
 	assert.ok(BigInt(a) < 1n << 64n)
+})
+
+// --- manager setup terminal state --------------------------------------------------
+
+test('manager setup: MAX_TICKS=1 rejects a refused creation instead of exiting clean', () => {
+	// A refused send is removed from pending because it is known not to have landed.
+	const terminal = managerSetupTerminal({ dryRun: false, pending: [] })
+	assert.deepEqual(terminal, {
+		ok: false,
+		cause: 'not_submitted',
+		instruction: 'manager creation was not submitted; fix the refusal, then rerun the setup command',
+	})
+	assert.equal(terminalExitCode(0, terminal), 1)
+})
+
+test('manager setup: MAX_TICKS=1 rejects an unknown creation and keeps recovery state', () => {
+	const create = op({ opId: 'create-1', kind: 'create_manager', clientOrderIds: [], status: 'unknown' })
+	const terminal = managerSetupTerminal({ dryRun: false, pending: [create] })
+	assert.equal(terminal.ok, false)
+	if (!terminal.ok) assert.equal(terminal.cause, 'outcome_unknown')
+	assert.equal(terminalExitCode(0, terminal), 1)
+	assert.equal(canFinalizePending(create, undefined), false)
+})
+
+test('manager setup: MAX_TICKS=1 rejects submitted creation whose manager id is unreadable', () => {
+	const create = op({ opId: 'create-2', kind: 'create_manager', clientOrderIds: [], status: 'submitted', digest: 'CREATE_DIGEST' })
+	const terminal = managerSetupTerminal({ dryRun: false, pending: [create] })
+	assert.equal(terminal.ok, false)
+	if (!terminal.ok) assert.equal(terminal.cause, 'id_unreadable')
+	assert.equal(terminalExitCode(0, terminal), 1)
+	assert.equal(canFinalizePending(create, undefined), false, 'the digest must remain pending until its manager id is persisted')
+	assert.equal(canFinalizePending(create, '0xmanager'), true)
 })
 
 // --- budgets --------------------------------------------------------------------------

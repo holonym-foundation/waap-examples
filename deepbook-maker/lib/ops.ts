@@ -6,7 +6,7 @@ import { Transaction } from '@mysten/sui/transactions'
 
 import { canReserve, foldReceipt, MIST_PER_SUI, type GasCaps } from './budget.ts'
 import type { Context } from './context.ts'
-import { classifySendFailure, makeOpId, resolveUnknown, type PendingKind, type PendingOp } from './pending.ts'
+import { canFinalizePending, classifySendFailure, makeOpId, resolveUnknown, type PendingKind, type PendingOp } from './pending.ts'
 import { addCleanup } from './ptb.ts'
 import { parseGasUsed } from './receipts.ts'
 import { residualFailures, type Residuals } from './smoke.ts'
@@ -84,7 +84,7 @@ export async function sendWithIntent(ctx: Context, args: { kind: PendingKind; b6
  * release their reservations; try to resolve unknown ones from our address's history.
  * Returns the operations still outstanding.
  */
-export async function reconcilePending(ctx: Context, logExtra: Record<string, unknown> = {}): Promise<PendingOp[]> {
+export async function reconcilePending(ctx: Context, logExtra: Record<string, unknown> = {}, readReceipt: typeof fetchReceipt = fetchReceipt): Promise<PendingOp[]> {
 	const { state } = ctx
 	for (const op of [...state.pending]) {
 		if (op.status === 'unknown' && !op.digest) {
@@ -102,9 +102,13 @@ export async function reconcilePending(ctx: Context, logExtra: Record<string, un
 			}
 		}
 		if (op.digest) {
-			const g = parseGasUsed(await fetchReceipt(op.digest), op.digest)
+			const g = parseGasUsed(await readReceipt(op.digest), op.digest)
 			if (!g) {
 				log('warn', 'tx_gas_missing', { opId: op.opId, digest: op.digest, note: 'receipt not readable yet; reservation kept', ...logExtra })
+				continue
+			}
+			if (!canFinalizePending(op, state.balanceManagerId, g.status)) {
+				log('warn', 'create_manager_id_unresolved', { opId: op.opId, digest: op.digest, status: g.status, note: 'receipt is retained until the created manager id is persisted; inspect it with `AGENT_DRY_RUN=0 npm run recover`, then rerun setup to recover the id without sending a second create', ...logExtra })
 				continue
 			}
 			state.budget = foldReceipt(state.budget, { netMist: Math.round(g.netSui * MIST_PER_SUI), status: g.status })
@@ -155,6 +159,17 @@ export async function runCleanup(ctx: Context, args: { runId?: string; proc: 'lo
 	const idFields = { owner, network: ctx.identity.network, poolKey: ctx.identity.poolKey, poolId: ctx.identity.poolId, balanceManagerId: managerId }
 	const recipient = args.recipient ?? owner
 	if (!managerId) {
+		await reconcilePending(ctx, { runId: args.runId })
+		if (state.pending.length) {
+			log('error', 'cleanup_failed', {
+				runId: args.runId,
+				proc: args.proc,
+				stage: 'manager_unknown',
+				pending: state.pending.map((p) => ({ opId: p.opId, kind: p.kind, status: p.status, digest: p.digest ?? null })),
+				instruction: 'run `AGENT_DRY_RUN=0 npm run recover` before retrying; never send a second manager creation while the first outcome is unresolved',
+			})
+			return { ok: false }
+		}
 		log('info', 'cleanup_not_needed', { runId: args.runId, proc: args.proc, reason: 'no manager' })
 		if (DRY_RUN) closeRun(ctx, args.runId)
 		return { ok: true, alreadyClean: true }

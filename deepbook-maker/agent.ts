@@ -30,6 +30,7 @@ import { findCreatedBalanceManagerId, parseOrderCanceled, parseOrderPlaced, type
 import { DEFAULT_FILL_SCAN_PAGES, FillLedger, ORDER_FILLED_TYPE, walkFills, type CollectedFill } from './lib/fills.ts'
 import { GAS_CAPS, GasBudgetError, RESERVE_PER_TX_MIST, reconcilePending, runCleanup, sendWithIntent } from './lib/ops.ts'
 import { blocksQuoting, makeClientOrderId } from './lib/pending.ts'
+import { managerSetupTerminal, terminalExitCode } from './lib/manager-setup.ts'
 import { addPlaceOrder } from './lib/ptb.ts'
 import { ownOrderLock, reconcileResting, type ChainOrder } from './lib/quotes.ts'
 import { DEFAULT_STRATEGY, planStrategy, type StrategyConfig } from './lib/strategy.ts'
@@ -595,6 +596,10 @@ async function prepareFills(): Promise<void> {
 
 async function finish(reason: string, exitCode: number): Promise<never> {
 	L('event', 'quotes_stopped', { reason, tick: ctx.state.tick })
+	const managerSetup = managerSetupTerminal({ dryRun: DRY_RUN, balanceManagerId: ctx.state.balanceManagerId, pending: ctx.state.pending })
+	if (!managerSetup.ok) {
+		L('error', 'manager_setup_failed', { reason, cause: managerSetup.cause, stateFile: STATE_FILE, instruction: managerSetup.instruction })
+	}
 	let cleanupOk = true
 	try {
 		const r = await runCleanup(ctx, { runId, proc: 'loop', reason, recipient: WITHDRAW_RECIPIENT })
@@ -605,7 +610,7 @@ async function finish(reason: string, exitCode: number): Promise<never> {
 	}
 	L('event', 'process_exit', { proc: 'loop', reason, cleanupOk, dryRun: DRY_RUN, ticks: ctx.state.tick, sendTxCalls: getSendTxCalls(), sendTxRefused: getSendTxRefused(), elapsedMs: Date.now() - runStartMs, gasConsumedSui: ctx.state.budget.gasConsumedMist / MIST_PER_SUI, fills: ctx.state.fills.ledger.length })
 	ctx.lock.release()
-	process.exit(cleanupOk ? exitCode : 1)
+	process.exit(cleanupOk ? terminalExitCode(exitCode, managerSetup) : 1)
 }
 
 async function main(): Promise<void> {

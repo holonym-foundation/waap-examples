@@ -39,6 +39,16 @@ export interface PendingOp {
 	lastError?: string
 }
 
+/**
+ * A successful create-manager receipt is not enough to finish the operation. Until the
+ * created object id is persisted, removing the pending operation could allow a second
+ * manager to be created. A failed receipt proves no manager was created, so its gas can
+ * be charged and the operation finalized.
+ */
+export function canFinalizePending(op: PendingOp, balanceManagerId: string | undefined, receiptStatus?: string): boolean {
+	return op.kind !== 'create_manager' || balanceManagerId !== undefined || receiptStatus === 'failure'
+}
+
 export function makeOpId(kind: PendingKind, seq: number, nowMs: number): string {
 	return `${kind}-${nowMs}-${seq}`
 }
