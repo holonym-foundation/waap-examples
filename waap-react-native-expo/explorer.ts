@@ -11,7 +11,6 @@ const EVM_EXPLORERS: Record<string, string> = {
   "0xaa36a7": "https://sepolia.etherscan.io/tx/",
   "0x2105": "https://basescan.org/tx/",
   "0x14a34": "https://sepolia.basescan.org/tx/",
-  "0x61": "https://testnet.bscscan.com/tx/",
   "0xa4b1": "https://arbiscan.io/tx/",
   "0xa": "https://optimistic.etherscan.io/tx/",
   "0x89": "https://polygonscan.com/tx/",

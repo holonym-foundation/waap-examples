@@ -6,11 +6,11 @@ export type EvmChain = {
   canSend: boolean;
 };
 
-// The web demo's networks, minus its local Hardhat chain.
+// The web demo's networks, minus its local Hardhat chain and BSC Testnet,
+// which the production wallet refuses ("Invalid chain ID").
 export const EVM_CHAINS: readonly EvmChain[] = [
   { id: "0xaa36a7", chainId: 11155111, label: "Sepolia", canSend: true },
   { id: "0x14a34", chainId: 84532, label: "Base Sepolia", canSend: true },
-  { id: "0x61", chainId: 97, label: "BSC Testnet", canSend: true },
   { id: "0x1", chainId: 1, label: "Ethereum", canSend: false },
 ];
 

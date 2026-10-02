@@ -129,7 +129,7 @@ Each button shows its result underneath it; the Log tab keeps the history.
 
 - **Account:** log in, connect, account status, log out; silent restore at
   launch.
-- **EVM:** Sepolia, Base Sepolia, BSC Testnet and Ethereum; short and long
+- **EVM:** Sepolia, Base Sepolia and Ethereum; short and long
   `personal_sign` and simple and nested EIP-712 on the selected chain, each
   verified on the device against the connected address; send 0 ETH to self on
   testnets only.
