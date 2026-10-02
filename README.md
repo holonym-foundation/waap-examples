@@ -6,6 +6,7 @@ A few quick start examples are available below to make integration even easier.
 - [Plain (`window.waap`) + Next.js](#plain--nextjs)
 - [Wagmi + Next.js](#wagmi--nextjs)
 - [Ethers + Next.js](#ethers-v6--nextjs)
+- [React Native (Expo), iOS and Android](#react-native-expo)
 
 There are helper files created to make integration snappy. Simply copy and paste relevant files into your project and you're good to go.
 
@@ -170,6 +171,34 @@ export default function SignMessage() {
   )
 }
 ```
+### React Native (Expo)
+
+[→ View source code](./waap-react-native-expo)
+
+```bash
+npx gitpick holonym-foundation/waap-examples/tree/main/waap-react-native-expo
+cd waap-react-native-expo
+pnpm install
+pnpm ios        # or: pnpm android
+```
+
+An iOS and Android app using `@human.tech/waap-sdk-react-native`: social and wallet login, session restore, and EVM, Solana and Stellar signing. It runs as a development build (not Expo Go), because the SDK uses native modules.
+
+Initialise once and keep `WaaPModule` mounted at the root; the wallet runs in its WebView. Then use the provider like any EIP-1193 provider.
+
+```typescript
+const provider = initWaapNative({
+  environment: 'production',
+  project: { appId: 'com.example.app', name: 'My App', nativeRedirect: 'myapp://', universalRedirect: 'https://myapp.example' },
+  nativeBrowser: createInAppNativeBrowser(InAppBrowser)
+})
+
+const [account] = await provider.request({ method: 'eth_accounts' }) // restores a session without prompting
+if (!account) await provider.login()
+```
+
+See the [example's README](./waap-react-native-expo/README.md) for the full setup.
+
 ---
 
 ## Other Examples and Templates

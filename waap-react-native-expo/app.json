@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "WaaP RN Example",
+    "slug": "waap-react-native-expo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "waaprnexample",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tech.human.waap.example.rn",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "metamask",
+          "trust",
+          "safe",
+          "rainbow",
+          "uniswap",
+          "zerion",
+          "imtokenv2",
+          "spot"
+        ]
+      }
+    },
+    "android": {
+      "package": "tech.human.waap.example.rn"
+    },
+    "plugins": ["./android-wallet-queries.js", "./ios-pod-deployment-target.js"]
+  }
+}
