@@ -1,0 +1,34 @@
+{
+	"name": "deepbook-maker",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "WaaP recipe: DeepBook DEEP/SUI market maker \u2014 builds unsigned PTBs and hands them to waap-cli; no key in the agent.",
+	"scripts": {
+		"dev": "tsx agent.ts",
+		"deposit": "tsx deposit.ts",
+		"stop": "tsx stop.ts",
+		"recover": "tsx recover.ts",
+		"refuse-probe": "tsx refuse-probe.ts",
+		"measure": "tsx build-dryrun.ts",
+		"test": "node --test --import tsx lib/*.test.ts",
+		"typecheck": "tsc --noEmit",
+		"measure:shapes": "tsx measure-shapes.ts",
+		"receipts": "tsx receipts.ts",
+		"fills": "tsx collect-fills.ts",
+		"measure:requote": "tsx measure-requote-rate.ts",
+		"grade:smoke": "tsx grade-smoke.ts"
+	},
+	"dependencies": {
+		"@mysten/deepbook-v3": "2.4.1",
+		"@mysten/sui": "2.31.0",
+		"dotenv": "17.2.3",
+		"execa": "9.6.0",
+		"undici": "6.24.1"
+	},
+	"devDependencies": {
+		"@types/node": "22.18.1",
+		"tsx": "4.20.6",
+		"typescript": "5.9.2"
+	}
+}

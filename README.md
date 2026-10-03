@@ -6,6 +6,7 @@ A few quick start examples are available below to make integration even easier.
 - [Plain (`window.waap`) + Next.js](#plain--nextjs)
 - [Wagmi + Next.js](#wagmi--nextjs)
 - [Ethers + Next.js](#ethers-v6--nextjs)
+- [DeepBook maker agent (Sui, waap-cli)](#deepbook-maker-agent-sui-waap-cli)
 
 There are helper files created to make integration snappy. Simply copy and paste relevant files into your project and you're good to go.
 
@@ -178,3 +179,17 @@ export default function SignMessage() {
 - **[Quilombo](https://quilombo.vercel.app)** by [j-h-scheufen](https://github.com/j-h-scheufen) ([source](https://github.com/j-h-scheufen/axedao))
 - **[WaaP Demo App](https://silk-demo-app.vercel.app/)** - Full-featured demo showcasing all functionality ([source](https://github.com/holonym-foundation/silk-demo-app))
 - **[Next.js + Viem Template](https://silk-template.vercel.app/)** - Template app using Human Wallet and Viem by [nestorbonilla](https://github.com/nestorbonilla) ([source](https://github.com/nestorbonilla/silk-template))
+
+### DeepBook maker agent (Sui, waap-cli)
+
+[→ View source code](./deepbook-maker) · [Recipe walkthrough](https://docs.waap.human.tech/recipes/deepbook-maker)
+
+```bash
+npx gitpick holonym-foundation/waap-examples/tree/main/deepbook-maker
+cd deepbook-maker
+npm ci
+./node_modules/.bin/tsx agent.ts    # dry run by default
+```
+
+A Node.js agent that quotes both sides of DeepBook's DEEP/SUI pool on Sui mainnet. It builds unsigned transactions and signs them through `waap-cli` on a WaaP Standard mode account, so the agent process holds no key. The built-in strategy has not demonstrated profitability; mainnet results are in [`deepbook-maker/VALIDATION.md`](./deepbook-maker/VALIDATION.md).
+
