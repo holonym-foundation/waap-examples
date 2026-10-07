@@ -61,7 +61,7 @@ outcome: confirmed / failed on chain / rejected by WaaP / unknown → local jour
 ## Install
 
 ```bash
-cd recipe
+cd suilend-supply
 npm ci                      # exact versions from package-lock.json
 npm test                    # offline tests (network is trapped), incl. multi-process tests
 npm run check:contract      # checks the bundled waap-cli flags (local only, no network)
