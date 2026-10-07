@@ -1,0 +1,1551 @@
+{
+  "event": "result",
+  "schemaVersion": 1,
+  "cli": {
+    "name": "waap-cli",
+    "version": "2.2.1",
+    "description": "CLI for AI agents to authenticate and sign transactions with the WaaP wallet"
+  },
+  "globalOptions": [
+    {
+      "flags": "-V, --version",
+      "short": "-V",
+      "long": "--version",
+      "description": "output the version number",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "hidden": false
+    },
+    {
+      "flags": "--json",
+      "long": "--json",
+      "description": "Force JSON output on stdout (suppresses plaintext progress logs)",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "hidden": false
+    },
+    {
+      "flags": "--quiet",
+      "long": "--quiet",
+      "description": "Suppress progress / banner output (still prints result + errors). Useful for piping. Implied by --json.",
+      "required": false,
+      "optional": false,
+      "variadic": false,
+      "hidden": false
+    }
+  ],
+  "commands": [
+    {
+      "path": "signup",
+      "name": "signup",
+      "aliases": [],
+      "description": "Start an email-approved agent registration and wait for approval",
+      "executable": true,
+      "hidden": false,
+      "authentication": "public",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-e, --email <email>",
+          "short": "-e",
+          "long": "--email",
+          "description": "Agent email address",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-p, --password <password>",
+          "short": "-p",
+          "long": "--password",
+          "description": "New-agent password (12–64 chars; A-Z a-z 0-9 -_.,:/+=@). INSECURE (visible in `ps` and shell history) — prefer --password-stdin",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--password-stdin",
+          "long": "--password-stdin",
+          "description": "Read password from stdin (one line, trailing newline stripped)",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-n, --name <name>",
+          "short": "-n",
+          "long": "--name",
+          "description": "Display name (defaults to email prefix)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--resume",
+          "long": "--resume",
+          "description": "Resume waiting for a previously started registration",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "login",
+      "name": "login",
+      "aliases": [],
+      "description": "Authenticate with email + password and save session",
+      "executable": true,
+      "hidden": false,
+      "authentication": "public",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-e, --email <email>",
+          "short": "-e",
+          "long": "--email",
+          "description": "Agent email address",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-p, --password <password>",
+          "short": "-p",
+          "long": "--password",
+          "description": "Prefer --password-stdin",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--password-stdin",
+          "long": "--password-stdin",
+          "description": "Read password from stdin (one line, trailing newline stripped)",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "reset-password",
+      "name": "reset-password",
+      "aliases": [],
+      "description": "Send a password-reset email. Open the link from your inbox to set a new password in the wallet UI, then log in again from the CLI.",
+      "executable": true,
+      "hidden": false,
+      "authentication": "public",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-e, --email <email>",
+          "short": "-e",
+          "long": "--email",
+          "description": "Email address to send the reset link to",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "whoami",
+      "name": "whoami",
+      "aliases": [],
+      "description": "Show the current agent wallet address",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "logout",
+      "name": "logout",
+      "aliases": [],
+      "description": "Clear the saved session",
+      "executable": true,
+      "hidden": false,
+      "authentication": "optional",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "session-info",
+      "name": "session-info",
+      "aliases": [],
+      "description": "Show safe session metadata (never prints credentials)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "local",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "sign-message",
+      "name": "sign-message",
+      "aliases": [],
+      "description": "Sign an arbitrary message via TAP (EVM t1 / Sui t1 / Solana t2)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-m, --message <text>",
+          "short": "-m",
+          "long": "--message",
+          "description": "Message to sign",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "sign-typed-data",
+      "name": "sign-typed-data",
+      "aliases": [],
+      "description": "Sign EIP-712 typed data (eth_signTypedData_v4) via TAP t1",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-d, --data <json>",
+          "short": "-d",
+          "long": "--data",
+          "description": "Typed data as a JSON string (EIP-712 format)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Required EVM chain identifier",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "sign-tx",
+      "name": "sign-tx",
+      "aliases": [],
+      "description": "Sign a transaction without broadcasting it (TAP); emits a portable artifact",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--to <address>",
+          "long": "--to",
+          "description": "Recipient address (0x… or sui…)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--value <amount>",
+          "long": "--value",
+          "description": "Amount to send in whole units: ETH for EVM, SUI for Sui, SOL for Solana (e.g. 0.001)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "0",
+          "hidden": false
+        },
+        {
+          "flags": "--tx <input>",
+          "long": "--tx",
+          "description": "Chain-native input (literal, or - for stdin; @file is not supported)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-bytes <base64>",
+          "long": "--tx-bytes",
+          "description": "Deprecated; use --tx <base64> --tx-format base64 instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-json <json>",
+          "long": "--tx-json",
+          "description": "Deprecated; use --tx <json> --tx-format json instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-format <format>",
+          "long": "--tx-format",
+          "description": "EVM: json|hex; Sui: json|base64; Solana: json|legacy-message|v0-message",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege <encoded>",
+          "long": "--privilege",
+          "description": "Deprecated argv input; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege-stdin",
+          "long": "--privilege-stdin",
+          "description": "Read an encoded Privilege from stdin",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--permission-token <encoded>",
+          "long": "--permission-token",
+          "description": "Deprecated; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--data <hex>",
+          "long": "--data",
+          "description": "EVM only: Optional calldata (0x-prefixed hex)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--legacy",
+          "long": "--legacy",
+          "description": "EVM only: Use legacy (Type 0) transaction",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "send-tx",
+      "name": "send-tx",
+      "aliases": [],
+      "description": "Build, sign (TAP), and broadcast a transaction",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--to <address>",
+          "long": "--to",
+          "description": "Recipient address (0x… or sui…)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--value <amount>",
+          "long": "--value",
+          "description": "Amount to send in whole units: ETH for EVM, SUI for Sui, SOL for Solana (e.g. 0.001)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "0",
+          "hidden": false
+        },
+        {
+          "flags": "--tx <input>",
+          "long": "--tx",
+          "description": "Chain-native input (literal, or - for stdin; @file is not supported)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-bytes <base64>",
+          "long": "--tx-bytes",
+          "description": "Deprecated; use --tx <base64> --tx-format base64 instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-json <json>",
+          "long": "--tx-json",
+          "description": "Deprecated; use --tx <json> --tx-format json instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-format <format>",
+          "long": "--tx-format",
+          "description": "EVM: json|hex; Sui: json|base64; Solana: json|legacy-message|v0-message",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege <encoded>",
+          "long": "--privilege",
+          "description": "Deprecated argv input; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege-stdin",
+          "long": "--privilege-stdin",
+          "description": "Read an encoded Privilege from stdin",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--permission-token <encoded>",
+          "long": "--permission-token",
+          "description": "Deprecated; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--data <hex>",
+          "long": "--data",
+          "description": "Optional calldata (0x-prefixed hex, EVM only)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--mint <address>",
+          "long": "--mint",
+          "description": "Solana SPL token mint (Base58). With --mint, --value is the raw token base-unit amount (integer).",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--legacy",
+          "long": "--legacy",
+          "description": "Use legacy (Type 0) tx instead of EIP-1559 (EVM only)",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--gastank",
+          "long": "--gastank",
+          "description": "Let XYZ pay gas from your gas tank when the sender cannot cover it (EVM, Sui, Solana)",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--nonce <n>",
+          "long": "--nonce",
+          "description": "Advanced: replace/cancel a stuck tx by re-signing at its nonce (EVM)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--wait",
+          "long": "--wait",
+          "description": "Wait for confirmed/failed status through the authenticated XYZ chain port",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "squid",
+      "name": "squid",
+      "aliases": [],
+      "description": "Lite (shared-dwallet) signer. Signs from a pre-created dwallet (sqd1 secp256k1 → EVM, sqd2 ed25519 → Sui/Solana) instead of your 2PC keyshare. See `squid send-tx` / `squid sign-tx`.",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "squid status",
+      "name": "status",
+      "aliases": [],
+      "description": "Show durable Squid provisioning state, addresses, network, and sign-service URL",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "squid addresses",
+      "name": "addresses",
+      "aliases": [],
+      "description": "Print the squid (lite) addresses for EVM, Sui, and Solana",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "squid init",
+      "name": "init",
+      "aliases": [],
+      "description": "Create or reconcile Squid dwallets (sqd1 + sqd2). Pending and active operations are rechecked/restored without another DKG; send/sign never auto-create.",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "squid refill",
+      "name": "refill",
+      "aliases": [],
+      "description": "Mint presign caps up to the buffer depth (3) via mint_lite_presign — no re-onboard / DKG. Gasless under the default Sui gas tank. The sign path also self-heals from empty, so this is only needed to pre-warm the pool.",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "squid send-tx",
+      "name": "send-tx",
+      "aliases": [],
+      "description": "Build, sign (lite), and broadcast a transaction from the squid signer (EVM/Sui/Solana)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--to <address>",
+          "long": "--to",
+          "description": "Recipient address (0x… or sui…)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--value <amount>",
+          "long": "--value",
+          "description": "Amount to send in whole units: ETH for EVM, SUI for Sui, SOL for Solana (e.g. 0.001)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "0",
+          "hidden": false
+        },
+        {
+          "flags": "--tx <input>",
+          "long": "--tx",
+          "description": "Chain-native input (literal, or - for stdin; @file is not supported)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-bytes <base64>",
+          "long": "--tx-bytes",
+          "description": "Deprecated; use --tx <base64> --tx-format base64 instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-json <json>",
+          "long": "--tx-json",
+          "description": "Deprecated; use --tx <json> --tx-format json instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-format <format>",
+          "long": "--tx-format",
+          "description": "EVM: json|hex; Sui: json|base64; Solana: json|legacy-message|v0-message",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege <encoded>",
+          "long": "--privilege",
+          "description": "Deprecated argv input; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege-stdin",
+          "long": "--privilege-stdin",
+          "description": "Read an encoded Privilege from stdin",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--permission-token <encoded>",
+          "long": "--permission-token",
+          "description": "Deprecated; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--data <hex>",
+          "long": "--data",
+          "description": "EVM only: Optional calldata (0x-prefixed hex)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--mint <address>",
+          "long": "--mint",
+          "description": "Solana SPL token mint (Base58). With --mint, --value is the raw token base-unit amount (integer).",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--coin-type <type>",
+          "long": "--coin-type",
+          "description": "Sui coin type to send (e.g. 0x…::ika::IKA). With --coin-type, --value is the raw token base-unit amount (integer).",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--gastank",
+          "long": "--gastank",
+          "description": "Let XYZ pay destination gas from your gas tank when the sender is short (EVM, Sui, Solana)",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--nonce <n>",
+          "long": "--nonce",
+          "description": "Advanced: replace/cancel a stuck tx by re-signing at its nonce (EVM)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--wait",
+          "long": "--wait",
+          "description": "Wait for confirmed/failed status through the authenticated XYZ chain port",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "squid sign-tx",
+      "name": "sign-tx",
+      "aliases": [],
+      "description": "Sign a transaction without broadcasting it (Squid); emits a portable artifact",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--to <address>",
+          "long": "--to",
+          "description": "Recipient address (0x… or sui…)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--value <amount>",
+          "long": "--value",
+          "description": "Amount to send in whole units: ETH for EVM, SUI for Sui, SOL for Solana (e.g. 0.001)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "0",
+          "hidden": false
+        },
+        {
+          "flags": "--tx <input>",
+          "long": "--tx",
+          "description": "Chain-native input (literal, or - for stdin; @file is not supported)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-bytes <base64>",
+          "long": "--tx-bytes",
+          "description": "Deprecated; use --tx <base64> --tx-format base64 instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-json <json>",
+          "long": "--tx-json",
+          "description": "Deprecated; use --tx <json> --tx-format json instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--tx-format <format>",
+          "long": "--tx-format",
+          "description": "EVM: json|hex; Sui: json|base64; Solana: json|legacy-message|v0-message",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege <encoded>",
+          "long": "--privilege",
+          "description": "Deprecated argv input; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--privilege-stdin",
+          "long": "--privilege-stdin",
+          "description": "Read an encoded Privilege from stdin",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--permission-token <encoded>",
+          "long": "--permission-token",
+          "description": "Deprecated; use --privilege-stdin instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "squid sign-message",
+      "name": "sign-message",
+      "aliases": [],
+      "description": "Sign a personal message via the Squid dwallet (EVM sqd1 / Sui and Solana sqd2)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-m, --message <text>",
+          "short": "-m",
+          "long": "--message",
+          "description": "Message to sign (UTF-8 or 0x-hex)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "evm chain id / eip155:* (default 8453), sui:<network>, or solana:<network>",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "squid sign-typed-data",
+      "name": "sign-typed-data",
+      "aliases": [],
+      "description": "Sign EIP-712 typed data via the Squid sqd1 EVM dwallet",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "-d, --data <json>",
+          "short": "-d",
+          "long": "--data",
+          "description": "Typed data as a JSON string (EIP-712 format)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Required EVM chain identifier",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "squid privilege",
+      "name": "privilege",
+      "aliases": [
+        "permission-token"
+      ],
+      "description": "Create a scoped Privilege for Squid CLI transaction automation",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "squid privilege create",
+      "name": "create",
+      "aliases": [],
+      "description": "Sign a short-lived v3 token bound to Squid for one CLI scope",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain <chain>",
+          "long": "--chain",
+          "description": "Token chain: evm:<id>, sui:<network>, or solana:<network>",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--allow <scope...>",
+          "long": "--allow",
+          "description": "Recipient or app scope: address, target:*, EVM target:selector, Sui target:module::function, or Solana target:disc:0x...",
+          "required": true,
+          "optional": false,
+          "variadic": true,
+          "hidden": false
+        },
+        {
+          "flags": "--amount-usd <amount>",
+          "long": "--amount-usd",
+          "description": "Positive lifetime USD allowance",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "1",
+          "hidden": false
+        },
+        {
+          "flags": "--expiry-seconds <seconds>",
+          "long": "--expiry-seconds",
+          "description": "Token lifetime, at most 7200 seconds",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "900",
+          "hidden": false
+        },
+        {
+          "flags": "--require-2fa-for-high-risk-tx",
+          "long": "--require-2fa-for-high-risk-tx",
+          "description": "Keep 2FA for ordinary high-risk threshold findings inside this Privilege",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "request",
+      "name": "request",
+      "aliases": [],
+      "description": "Perform an allowlisted account, chain, or read-only EIP-1193 request",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [
+        {
+          "name": "method",
+          "description": "Allowed method name (e.g. eth_accounts, eth_chainId, eth_call)",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "params",
+          "description": "Method parameters (JSON array or individual strings)",
+          "required": false,
+          "variadic": true
+        }
+      ],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Required EVM chain identifier (\"8453\", \"evm:8453\", or \"eip155:8453\").",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--rpc <url>",
+          "long": "--rpc",
+          "description": "Custom RPC URL to override the default publicnode",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "chain",
+      "name": "chain",
+      "aliases": [],
+      "description": "Manage chain preferences",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "chain get",
+      "name": "get",
+      "aliases": [],
+      "description": "Show the current default chain and RPC",
+      "executable": true,
+      "hidden": false,
+      "authentication": "local",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "chain set",
+      "name": "set",
+      "aliases": [],
+      "description": "Deprecated; pass --chain explicitly to each command",
+      "executable": true,
+      "hidden": false,
+      "authentication": "local",
+      "arguments": [
+        {
+          "name": "chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "flags": "--rpc <url>",
+          "long": "--rpc",
+          "description": "Default RPC URL for this chain",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "policy",
+      "name": "policy",
+      "aliases": [],
+      "description": "Manage wallet policy settings (spend limits, 2FA, etc.)",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "policy get",
+      "name": "get",
+      "aliases": [],
+      "description": "Show current policy settings (2FA method, daily spend limit, etc.)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "policy set",
+      "name": "set",
+      "aliases": [],
+      "description": "Update policy settings",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--daily-spend-limit <usd>",
+          "long": "--daily-spend-limit",
+          "description": "Set the daily spend limit in whole USD (0–10,000; e.g. 500)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "privilege",
+      "name": "privilege",
+      "aliases": [
+        "permission-token"
+      ],
+      "description": "Create a scoped Privilege for CLI transaction automation",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "privilege create",
+      "name": "create",
+      "aliases": [],
+      "description": "Sign a short-lived v3 token with TAP t1 for one CLI scope",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain <chain>",
+          "long": "--chain",
+          "description": "Token chain: evm:<id>, sui:<network>, or solana:<network>",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--allow <scope...>",
+          "long": "--allow",
+          "description": "Recipient or app scope: address, target:*, EVM target:selector, Sui target:module::function, or Solana target:disc:0x...",
+          "required": true,
+          "optional": false,
+          "variadic": true,
+          "hidden": false
+        },
+        {
+          "flags": "--amount-usd <amount>",
+          "long": "--amount-usd",
+          "description": "Positive lifetime USD allowance",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "1",
+          "hidden": false
+        },
+        {
+          "flags": "--expiry-seconds <seconds>",
+          "long": "--expiry-seconds",
+          "description": "Token lifetime, at most 7200 seconds",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "defaultValue": "900",
+          "hidden": false
+        },
+        {
+          "flags": "--require-2fa-for-high-risk-tx",
+          "long": "--require-2fa-for-high-risk-tx",
+          "description": "Keep 2FA for ordinary high-risk threshold findings inside this Privilege",
+          "required": false,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "2fa",
+      "name": "2fa",
+      "aliases": [],
+      "description": "Manage Two-Factor Authentication (2FA) for transactions",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "2fa status",
+      "name": "status",
+      "aliases": [],
+      "description": "View current 2FA status",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "2fa enable",
+      "name": "enable",
+      "aliases": [],
+      "description": "Enable a 2FA method (one of: --email, --phone, --wallet, --telegram)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--email <email>",
+          "long": "--email",
+          "description": "Enable email 2FA",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--phone <phone>",
+          "long": "--phone",
+          "description": "Enable phone 2FA",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--wallet <address>",
+          "long": "--wallet",
+          "description": "Enable external wallet signature 2FA (0x...)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--telegram <chatId>",
+          "long": "--telegram",
+          "description": "Enable Telegram 2FA (chat id)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "2fa disable",
+      "name": "disable",
+      "aliases": [],
+      "description": "Disable 2FA requirements (WARNING: Reduced Security)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "wallet-balance",
+      "name": "wallet-balance",
+      "aliases": [],
+      "description": "Show the wallet's on-chain native balance (ETH for EVM, SUI for Sui)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--rpc <url>",
+          "long": "--rpc",
+          "description": "RPC URL override (defaults to the public fullnode)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "balance",
+      "name": "balance",
+      "aliases": [],
+      "aliasFor": "wallet-balance",
+      "description": "Deprecated alias for `wallet-balance` — use that instead.",
+      "executable": true,
+      "hidden": true,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--chain-id <id>",
+          "long": "--chain-id",
+          "description": "Deprecated; use --chain <id> instead",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:mainnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--rpc <url>",
+          "long": "--rpc",
+          "description": "RPC URL (auto-selected if not provided)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "gastank",
+      "name": "gastank",
+      "aliases": [],
+      "description": "Gas tank balances and deposits",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "gastank balance",
+      "name": "balance",
+      "aliases": [],
+      "description": "Show every denomination held in the gas tank",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "gastank topup",
+      "name": "topup",
+      "aliases": [],
+      "description": "Deposit into the gas tank",
+      "executable": false,
+      "hidden": false,
+      "authentication": null,
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "gastank topup info",
+      "name": "info",
+      "aliases": [],
+      "description": "Show the chains and assets accepted for deposits",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "gastank topup confirm",
+      "name": "confirm",
+      "aliases": [],
+      "description": "Credit a deposit you have already sent on-chain",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--tx-hash <hash>",
+          "long": "--tx-hash",
+          "description": "Hash of the deposit transaction",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        },
+        {
+          "flags": "--chain <string>",
+          "long": "--chain",
+          "description": "Chain identifier (e.g. 8453, evm:8453, sui:testnet, solana:devnet)",
+          "required": true,
+          "optional": false,
+          "variadic": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "path": "gastank topup sync",
+      "name": "sync",
+      "aliases": [],
+      "description": "Credit any deposits that were sent but never confirmed",
+      "executable": true,
+      "hidden": false,
+      "authentication": "signing",
+      "arguments": [],
+      "options": []
+    },
+    {
+      "path": "completion",
+      "name": "completion",
+      "aliases": [],
+      "description": "Print a shell-completion script (bash | zsh | fish)",
+      "executable": true,
+      "hidden": false,
+      "authentication": "public",
+      "arguments": [
+        {
+          "name": "shell",
+          "description": "Shell name — one of: bash, zsh, fish",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": []
+    },
+    {
+      "path": "commands",
+      "name": "commands",
+      "aliases": [
+        "schema"
+      ],
+      "description": "Describe commands, arguments, options, aliases, and authentication as JSON",
+      "executable": true,
+      "hidden": false,
+      "authentication": "public",
+      "arguments": [],
+      "options": []
+    }
+  ]
+}

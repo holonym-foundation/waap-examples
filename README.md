@@ -7,6 +7,7 @@ A few quick start examples are available below to make integration even easier.
 - [Wagmi + Next.js](#wagmi--nextjs)
 - [Ethers + Next.js](#ethers-v6--nextjs)
 - [DeepBook maker agent (Sui, waap-cli)](#deepbook-maker-agent-sui-waap-cli)
+- [SuiLend supply and withdraw (Sui, waap-cli)](#suilend-supply-and-withdraw-sui-waap-cli)
 
 There are helper files created to make integration snappy. Simply copy and paste relevant files into your project and you're good to go.
 
@@ -193,3 +194,16 @@ npm ci
 
 A Node.js agent that quotes both sides of DeepBook's DEEP/SUI pool on Sui mainnet. It builds unsigned transactions and signs them through `waap-cli` on a WaaP Standard mode account, so the agent process holds no key. The built-in strategy has not demonstrated profitability; mainnet results are in [`deepbook-maker/VALIDATION.md`](./deepbook-maker/VALIDATION.md).
 
+### SuiLend supply and withdraw (Sui, waap-cli)
+
+[→ View source code](./suilend-supply) · [Getting started](./suilend-supply/docs/GETTING-STARTED.md)
+
+```bash
+npx gitpick holonym-foundation/waap-examples/tree/main/suilend-supply
+cd suilend-supply
+npm ci
+./bin/suilend-waap.mjs doctor
+./bin/suilend-waap.mjs supply --amount <SUI> --json    # dry run by default; you choose the amount
+```
+
+A Node.js command-line tool that supplies SUI to SuiLend's main market, shows the position, and withdraws it, signing through `waap-cli` on a WaaP Standard mode account, so the tool holds no key. Every transaction is simulated first and only sent with `--yes`; it never borrows. A mainnet supply and withdraw round trip is recorded in [`suilend-supply/VALIDATION.md`](./suilend-supply/VALIDATION.md).

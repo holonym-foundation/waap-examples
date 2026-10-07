@@ -1,0 +1,36 @@
+{
+  "name": "suilend-waap-recipe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone recipe: supply/monitor/withdraw SUI on SuiLend (main market) using a WaaP wallet via waap-cli. No borrowing.",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "bin": {
+    "suilend-waap": "./bin/suilend-waap.mjs"
+  },
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check:contract": "node scripts/check-waap-cli-contract.mjs",
+    "check:mutation": "node scripts/mutation-check.mjs",
+    "check:race": "node scripts/race-loop.mjs 21",
+    "evidence": "sh scripts/run-evidence.sh"
+  },
+  "dependencies": {
+    "@human.tech/waap-cli": "2.2.1",
+    "@mysten/bcs": "2.1.2",
+    "@mysten/sui": "2.34.0",
+    "@suilend/sdk": "13.0.0",
+    "@suilend/sui-core": "2.1.0",
+    "bignumber.js": "11.1.5",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
