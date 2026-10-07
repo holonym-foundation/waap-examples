@@ -25,12 +25,12 @@ Example: on 2026-10-06 the SUI reserve showed a supply rate of 0.9739% APR. At t
 
 ## Step by step
 
-All commands run from the `recipe` folder.
+All commands run from the `suilend-supply` folder.
 
 ### 1. Install
 
 ```bash
-cd recipe
+cd suilend-supply
 npm ci
 ```
 
@@ -132,7 +132,7 @@ Use `--json` so every output line is one JSON object. The README's "For agents" 
 
 Example prompt:
 
-> Use the suilend-waap recipe in `./recipe`. Run `status --json` and tell me my balances and the current supply rate. Then run a dry run of `supply --amount <the amount I give you> --json` and show me the result and warnings. Do not add `--yes` until I reply with the amount I approve. If any command exits with code 7, stop and run `status`.
+> Use the suilend-waap recipe in `./suilend-supply`. Run `status --json` and tell me my balances and the current supply rate. Then run a dry run of `supply --amount <the amount I give you> --json` and show me the result and warnings. Do not add `--yes` until I reply with the amount I approve. If any command exits with code 7, stop and run `status`.
 
 Phone-based 2FA needs a terminal, so an agent without one cannot finish it. Use email or app approval, or run the `--yes` step yourself.
 
