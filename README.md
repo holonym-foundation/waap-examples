@@ -203,7 +203,7 @@ npx gitpick holonym-foundation/waap-examples/tree/main/suilend-supply
 cd suilend-supply
 npm ci
 ./bin/suilend-waap.mjs doctor
-./bin/suilend-waap.mjs supply --amount 0.1 --json    # dry run by default
+./bin/suilend-waap.mjs supply --amount <SUI> --json    # dry run by default; you choose the amount
 ```
 
 A Node.js command-line tool that supplies SUI to SuiLend's main market, shows the position, and withdraws it, signing through `waap-cli` on a WaaP Standard mode account, so the tool holds no key. Every transaction is simulated first and only sent with `--yes`; it never borrows. A mainnet supply and withdraw round trip is recorded in [`suilend-supply/VALIDATION.md`](./suilend-supply/VALIDATION.md).

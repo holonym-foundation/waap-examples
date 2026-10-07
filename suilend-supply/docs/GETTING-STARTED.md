@@ -81,10 +81,10 @@ Read these fields:
 
 ### 5. Supply: dry run
 
-Start with a small amount.
+Choose your own amount; the tool never picks one. The example output below is from a test with 0.1 SUI.
 
 ```bash
-./bin/suilend-waap.mjs supply --amount 0.1 --new-obligation --json
+./bin/suilend-waap.mjs supply --amount <SUI> --new-obligation --json
 ```
 
 Your first supply creates an obligation either way. `--new-obligation` makes that explicit, and later it keeps a new supply separate from an existing position. Shortened example:
@@ -100,7 +100,7 @@ Your first supply creates an obligation either way. `--new-obligation` makes tha
 Run the same command with `--yes`. WaaP may ask you to approve with 2FA. If it prints a confirmation link, open it.
 
 ```bash
-./bin/suilend-waap.mjs supply --amount 0.1 --new-obligation --yes
+./bin/suilend-waap.mjs supply --amount <SUI> --new-obligation --yes
 ```
 
 Success means the result shows `"outcome":"reconciled"` and exit code 0. Check the transaction digest in a Sui explorer.
@@ -132,7 +132,7 @@ Use `--json` so every output line is one JSON object. The README's "For agents" 
 
 Example prompt:
 
-> Use the suilend-waap recipe in `./recipe`. Run `status --json` and tell me my balances and the current supply rate. Then run a dry run of `supply --amount 0.1 --json` and show me the result and warnings. Do not add `--yes` until I reply with the amount I approve. If any command exits with code 7, stop and run `status`.
+> Use the suilend-waap recipe in `./recipe`. Run `status --json` and tell me my balances and the current supply rate. Then run a dry run of `supply --amount <the amount I give you> --json` and show me the result and warnings. Do not add `--yes` until I reply with the amount I approve. If any command exits with code 7, stop and run `status`.
 
 Phone-based 2FA needs a terminal, so an agent without one cannot finish it. Use email or app approval, or run the `--yes` step yourself.
 
