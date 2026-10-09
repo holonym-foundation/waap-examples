@@ -1,0 +1,13 @@
+# dependencies
+/node_modules
+
+# Expo generates the native projects from app.json (`expo run:ios`/`android`)
+/ios
+/android
+/.expo
+/dist
+
+# misc
+.DS_Store
+*.log
+.env*.local

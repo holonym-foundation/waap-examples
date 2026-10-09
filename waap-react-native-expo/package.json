@@ -1,0 +1,41 @@
+{
+  "name": "waap-react-native-expo",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.26.0",
+    "@human.tech/waap-sdk-react-native": "1.1.0-staging-55513d1ba",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "@solana-program/compute-budget": "0.16.0",
+    "@solana-program/system": "0.12.2",
+    "@solana/kit": "6.10.0",
+    "@stellar/stellar-base": "15.0.0",
+    "buffer": "^6.0.3",
+    "expo": "54.0.27",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-get-random-values": "^2.0.0",
+    "react-native-inappbrowser-reborn": "^3.7.0",
+    "react-native-keychain": "^10.0.0",
+    "react-native-safe-area-context": "^5.6.2",
+    "react-native-svg": "^15.11.0",
+    "react-native-webview": "13.15.0",
+    "viem": "2.55.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@types/react": "19.1.10",
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.10"
+  }
+}
