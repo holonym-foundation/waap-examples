@@ -1,0 +1,7 @@
+node_modules/
+.env
+state.json
+agent.pid
+logs/
+state.dry.json
+*.tmp

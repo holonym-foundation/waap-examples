@@ -1,0 +1,253 @@
+{
+ "description": "Every transaction that changed the sender wallet between 2026-09-28T14:10Z and 16:05Z (queried FromAddress and ToAddress), and the two OrderFilled events of our resting orders. All figures come from public chain data; nothing here is a credential. Re-derive with: node evidence/check-ledger.mjs",
+ "network": "sui:mainnet",
+ "pool": "DEEP_SUI",
+ "custody": "WaaP Standard mode, signed through waap-cli send-tx 2.2.0",
+ "sender": "0xc9afaf6e0de1cdf3f830384303f7dbd1bb9c29350f4406ca614811dda61bae8a",
+ "balanceManager": "0xdceb4ba0957e681550518f87b62c12a5bed5d420f1cfadf156cb08be9f2dd2b5",
+ "window": {
+  "fromUtc": "2026-09-28T14:10:00Z",
+  "toUtc": "2026-09-28T16:05:00Z"
+ },
+ "code": {
+  "run_2": "065e902",
+  "stopped_attempt": "065e902"
+ },
+ "walletBalances": {
+  "beforeSui": "2.896094463",
+  "afterSui": "2.881038567",
+  "deep": "68 before and after",
+  "source": "waap-cli and RPC reads saved in the run log; the per-transaction changes below re-derive the difference"
+ },
+ "transactions": [
+  {
+   "digest": "n2M9psaA88Z3pcafxjgrV8ciuodHiHL2GE5Q3Dc8yHV",
+   "time": "2026-09-28T14:19:19.551Z",
+   "attempt": "stopped_attempt",
+   "kind": "deposit",
+   "status": "success",
+   "netGasMist": 1687348,
+   "walletSuiMist": -2551687348,
+   "walletDeepRaw": -68000000
+  },
+  {
+   "digest": "4Y7rjA147GvFxGfDtqsgZRz3eop9Hicrtiwqjf6PSHax",
+   "time": "2026-09-28T14:50:14.802Z",
+   "attempt": "stopped_attempt",
+   "kind": "cleanup",
+   "status": "success",
+   "netGasMist": -3246088,
+   "walletSuiMist": 2553246088,
+   "walletDeepRaw": 68000000
+  },
+  {
+   "digest": "9ayWdJdn1qWT9njy2CppCyDx5G5SuM93AdvqJWsj99XP",
+   "time": "2026-09-28T14:50:51.792Z",
+   "attempt": "run_2",
+   "kind": "deposit",
+   "status": "success",
+   "netGasMist": 3643588,
+   "walletSuiMist": -2553643588,
+   "walletDeepRaw": -68000000
+  },
+  {
+   "digest": "BoQipnWUfWJoSg5s3XR85bW7bnGreGKMVeqfjNxVgoGD",
+   "time": "2026-09-28T14:53:05.878Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3202996,
+   "walletSuiMist": -3202996,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "J1i14u4pAEr9jrotEfSvdGu5QiqahLwFiNKVimi12S26",
+   "time": "2026-09-28T14:55:43.002Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 1892468,
+   "walletSuiMist": -1892468,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "7kBWz72inir4ZaNqQW9c5ZvebfhgQoAtoSfYpiCirDFw",
+   "time": "2026-09-28T14:58:14.040Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 672260,
+   "walletSuiMist": -672260,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "3N72W12tQM51MvUymja7F3gSLZ2NwTr9v14wtiKHdvLQ",
+   "time": "2026-09-28T15:01:58.214Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": -143380,
+   "walletSuiMist": 143380,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "koURUqeLf2C9bwLAnxWCoumbjpzwawyvevGxFnHnfE4",
+   "time": "2026-09-28T15:03:19.572Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3229216,
+   "walletSuiMist": -3229216,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "BA9bfkohApmh9AfiCkXHTZ21DY4VaMad9wEiM7omUUKD",
+   "time": "2026-09-28T15:05:49.379Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": -740072,
+   "walletSuiMist": 740072,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "GYWQbbXw2sktQsTxWhFhU6nEZYURbbS8uuUxcQSJuPDX",
+   "time": "2026-09-28T15:11:44.754Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3229216,
+   "walletSuiMist": -3229216,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "984AfDKJJVYuUPDcjbQc8sB6NWuvioubjSm5JY9BDkez",
+   "time": "2026-09-28T15:14:17.651Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": -766292,
+   "walletSuiMist": 766292,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "7maYThavuMCDjuSzJzu7jkNmba4c14WisuQcU1erdgM7",
+   "time": "2026-09-28T15:19:11.530Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3211736,
+   "walletSuiMist": -3211736,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "6vE1zG7wEQbW8MzjavE9i12efGwPfD75NQ3iM11T6XER",
+   "time": "2026-09-28T15:20:33.787Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": -766292,
+   "walletSuiMist": 766292,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "3YGCrNKa1bEy6uthzAbBe1SnhvNTuZAPBJ3cY3MK1JxS",
+   "time": "2026-09-28T15:24:12.719Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3237956,
+   "walletSuiMist": -3237956,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "GwphwuxFKEf3UC1LQrHBfa7V1FYr31tsf3TTjdf1weFq",
+   "time": "2026-09-28T15:33:33.425Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": -757552,
+   "walletSuiMist": 757552,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "3xKEHqKG2CftYRfAeQbMQqBm6cbesf4cW1hUncAmRGXc",
+   "time": "2026-09-28T15:39:30.729Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3229216,
+   "walletSuiMist": -3229216,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "2MTdVgaHZP1ED4FFnB2Qh4M8xWCYYaavV2a61sNCMAbY",
+   "time": "2026-09-28T15:43:08.014Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": -748812,
+   "walletSuiMist": 748812,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "EkQQjGUYJTssw1J5aicXfnAmjZnoC4i8qPd13Bg9mvgx",
+   "time": "2026-09-28T15:55:19.898Z",
+   "attempt": "run_2",
+   "kind": "requote",
+   "status": "success",
+   "netGasMist": 3229216,
+   "walletSuiMist": -3229216,
+   "walletDeepRaw": 0
+  },
+  {
+   "digest": "CfxyhRfjtq7gGZnhfXPCMoT4iHkXpzYszKoudUJdeCA7",
+   "time": "2026-09-28T15:56:41.563Z",
+   "attempt": "run_2",
+   "kind": "cleanup",
+   "status": "success",
+   "netGasMist": -4240832,
+   "walletSuiMist": 2558240832,
+   "walletDeepRaw": 68000000
+  }
+ ],
+ "fills": [
+  {
+   "digest": "397dDA4YyN56gNtUiPRwbN7GiHyKAagiPQSiYWpEwq4U",
+   "time": "2026-09-28T14:55:14.790Z",
+   "ourSide": "bid",
+   "price": 18.73,
+   "baseDeep": 50.0,
+   "quoteSui": 0.9365,
+   "makerBalanceManager": "0xdceb4ba0957e681550518f87b62c12a5bed5d420f1cfadf156cb08be9f2dd2b5",
+   "takerBalanceManager": "0x3378c2a237037fe4b32abadb74aa90b2e8a7f2c65c0b391b688af9fe287afd67",
+   "takerSender": "0xb6092855ca74d316ccee7f974000275b3096517ef56ddef6684cf39a6f4bcb60"
+  },
+  {
+   "digest": "3HqcEsfr2KxVZLcb9tebneXDdqfznK6zSWgyoMshXkBg",
+   "time": "2026-09-28T15:00:45.508Z",
+   "ourSide": "ask",
+   "price": 18.81,
+   "baseDeep": 50.0,
+   "quoteSui": 0.9405,
+   "makerBalanceManager": "0xdceb4ba0957e681550518f87b62c12a5bed5d420f1cfadf156cb08be9f2dd2b5",
+   "takerBalanceManager": "0x3378c2a237037fe4b32abadb74aa90b2e8a7f2c65c0b391b688af9fe287afd67",
+   "takerSender": "0xb6092855ca74d316ccee7f974000275b3096517ef56ddef6684cf39a6f4bcb60"
+  }
+ ],
+ "expected": {
+  "run_2": {
+   "spreadSui": "0.004000000",
+   "netGasSui": "0.020614636",
+   "resultSui": "-0.016614636"
+  },
+  "stopped_attempt": {
+   "netGasSui": "-0.001558740",
+   "note": "its cleanup storage rebate exceeded its deposit gas"
+  },
+  "window": {
+   "walletSuiChange": "-0.015055896",
+   "walletDeepChange": "0"
+  }
+ }
+}
