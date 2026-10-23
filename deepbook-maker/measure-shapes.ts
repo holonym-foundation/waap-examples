@@ -34,11 +34,13 @@
 import 'dotenv/config'
 
 import { DeepBookClient, mainnetPools, testnetPools } from '@mysten/deepbook-v3'
-import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc'
+import { SuiGrpcClient } from '@mysten/sui/grpc'
 import { Transaction } from '@mysten/sui/transactions'
 
+import { simulateEffects } from './lib/chain.ts'
+
 const NETWORK = (process.env.NETWORK ?? 'mainnet') as 'mainnet' | 'testnet'
-const SUI_RPC = process.env.SUI_RPC ?? 'https://sui-rpc.publicnode.com'
+const SUI_RPC = process.env.SUI_GRPC ?? 'https://fullnode.mainnet.sui.io:443'
 const POOL_KEY = process.env.POOL_KEY ?? 'DEEP_SUI'
 const SPREAD_BPS = Number(process.env.SPREAD_BPS ?? '20')
 const ORDER_SIZE = Number(process.env.ORDER_SIZE ?? '100')
@@ -53,7 +55,7 @@ if (!SIM_SENDER) {
 	process.exit(1)
 }
 
-const sui = new SuiJsonRpcClient({ url: SUI_RPC, network: NETWORK })
+const sui = new SuiGrpcClient({ baseUrl: SUI_RPC, network: NETWORK })
 const POOLS = NETWORK === 'mainnet' ? mainnetPools : testnetPools
 const POOL = POOLS[POOL_KEY]
 
@@ -85,7 +87,7 @@ async function simulate(shape: string, when: string, build: (tx: Transaction) =>
 		tx.setSender(SIM_SENDER!)
 		build(tx)
 		const bytes = await tx.build({ client: sui })
-		const res = await sui.dryRunTransactionBlock({ transactionBlock: bytes })
+		const res = await simulateEffects(sui, bytes)
 		const g = res.effects.gasUsed
 		const computation = BigInt(g.computationCost)
 		const storage = BigInt(g.storageCost)

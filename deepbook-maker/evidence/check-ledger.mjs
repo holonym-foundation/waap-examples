@@ -1,27 +1,29 @@
 // Re-derive the 28 September ledger from public chain data. Read-only, no credentials, no dependencies.
 //
-//   node evidence/check-ledger.mjs                 # uses SUI_RPC or publicnode
+//   node evidence/check-ledger.mjs                 # uses SUI_GRAPHQL or Mysten's public GraphQL
 //
-// It lists every transaction that changed the sender wallet in the manifest's window
-// (FromAddress and ToAddress queries), checks the set matches the manifest, sums gas and
-// wallet balance changes from each transaction's effects, reads the two OrderFilled events,
-// and compares the totals with the manifest's `expected` block. Exit code 0 means all match.
+// It lists every transaction that touched the sender wallet in the manifest's window, checks
+// the set matches the manifest, sums gas and wallet balance changes from each transaction's
+// effects, reads the two OrderFilled events, and compares the totals with the manifest's
+// `expected` block. Exit code 0 means all match.
+//
+// Sui GraphQL, not JSON-RPC: Mysten retired public JSON-RPC, publicnode has pruned these
+// effects, and rpc-mainnet.suiscan.xyz returns 404 (all checked 2026-10-22).
 import { readFileSync } from 'node:fs'
 
-const m = JSON.parse(readFileSync(new URL('./2026-09-28-run-2.json', import.meta.url), 'utf8'))
-const RPC = process.env.SUI_RPC || 'https://sui-rpc.publicnode.com'
-const SUI = '0x2::sui::SUI'
+const m = JSON.parse(readFileSync(process.argv[2] ?? new URL('./2026-09-28-run-2.json', import.meta.url), 'utf8'))
+const GQL = process.env.SUI_GRAPHQL || 'https://graphql.mainnet.sui.io/graphql'
+const SUI = '0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI'
 const start = Date.parse(m.window.fromUtc)
 const end = Date.parse(m.window.toUtc)
 
-let id = 0
-async function rpc(method, params) {
+async function gql(query, variables) {
 	for (let i = 0; ; i++) {
 		try {
-			const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) })
+			const r = await fetch(GQL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query, variables }) })
 			const j = await r.json()
-			if (j.error) throw new Error(JSON.stringify(j.error))
-			return j.result
+			if (j.errors) throw new Error(JSON.stringify(j.errors))
+			return j.data
 		} catch (err) {
 			if (i === 3) throw err
 			await new Promise((r) => setTimeout(r, 1000))
@@ -29,20 +31,28 @@ async function rpc(method, params) {
 	}
 }
 
-async function inWindow(filter) {
-	const out = []
-	let cursor = null
-	for (;;) {
-		const page = await rpc('suix_queryTransactionBlocks', [{ filter, options: { showEffects: true, showBalanceChanges: true } }, cursor, 50, true])
-		for (const t of page.data) if (Number(t.timestampMs) >= start && Number(t.timestampMs) <= end) out.push(t)
-		const last = page.data.at(-1)
-		if (!page.hasNextPage || !last || Number(last.timestampMs) < start) return out
-		cursor = page.nextCursor
-	}
-}
+const TX_FIELDS = `digest sender { address }
+	effects { status timestamp
+		gasEffects { gasSummary { computationCost storageCost storageRebate } }
+		balanceChanges(first: 50) { nodes { owner { address } amount coinType { repr } } }
+		events(first: 50) { nodes { contents { type { repr } json } } } }`
 
+// Every transaction that touched the sender, newest first, paged back until before the window.
 const txs = new Map()
-for (const t of [...(await inWindow({ FromAddress: m.sender })), ...(await inWindow({ ToAddress: m.sender }))]) txs.set(t.digest, t)
+let before = null
+for (;;) {
+	const d = await gql(`query($a: SuiAddress!, $b: String) { transactions(last: 50, before: $b, filter: { affectedAddress: $a }) {
+		pageInfo { hasPreviousPage startCursor } nodes { ${TX_FIELDS} } } }`, { a: m.sender, b: before })
+	const page = d.transactions
+	let oldest = Infinity
+	for (const t of page.nodes) {
+		const ts = Date.parse(t.effects.timestamp)
+		oldest = Math.min(oldest, ts)
+		if (ts >= start && ts <= end) txs.set(t.digest, t)
+	}
+	if (!page.pageInfo.hasPreviousPage || oldest < start) break
+	before = page.pageInfo.startCursor
+}
 
 const fails = []
 const expectDigests = new Set(m.transactions.map((t) => t.digest))
@@ -54,12 +64,12 @@ let deep = 0n
 for (const e of m.transactions) {
 	const t = txs.get(e.digest)
 	if (!t) continue
-	if (t.effects.status.status !== 'success') fails.push(`${e.digest} status ${t.effects.status.status}`)
-	const g = t.effects.gasUsed
+	if (t.effects.status !== 'SUCCESS') fails.push(`${e.digest} status ${t.effects.status}`)
+	const g = t.effects.gasEffects.gasSummary
 	const gas = BigInt(g.computationCost) + BigInt(g.storageCost) - BigInt(g.storageRebate)
-	const mine = (t.balanceChanges ?? []).filter((b) => b.owner?.AddressOwner === m.sender)
-	const sui = mine.filter((b) => b.coinType === SUI).reduce((s, b) => s + BigInt(b.amount), 0n)
-	deep += mine.filter((b) => b.coinType.endsWith('::deep::DEEP')).reduce((s, b) => s + BigInt(b.amount), 0n)
+	const mine = t.effects.balanceChanges.nodes.filter((b) => b.owner?.address === m.sender)
+	const sui = mine.filter((b) => b.coinType.repr === SUI).reduce((s, b) => s + BigInt(b.amount), 0n)
+	deep += mine.filter((b) => b.coinType.repr.endsWith('::deep::DEEP')).reduce((s, b) => s + BigInt(b.amount), 0n)
 	if (gas !== BigInt(e.netGasMist)) fails.push(`${e.digest} gas ${gas} ≠ manifest ${e.netGasMist}`)
 	if (sui !== BigInt(e.walletSuiMist)) fails.push(`${e.digest} wallet SUI ${sui} ≠ manifest ${e.walletSuiMist}`)
 	sum[e.attempt].gas += gas
@@ -68,12 +78,13 @@ for (const e of m.transactions) {
 
 let spreadMist = 0n
 for (const f of m.fills) {
-	const t = await rpc('sui_getTransactionBlock', [f.digest, { showEvents: true, showInput: true }])
-	const ev = t.events.map((x) => ({ type: x.type, j: x.parsedJson })).find((x) => x.type.endsWith('::order_info::OrderFilled') && x.j.maker_balance_manager_id === m.balanceManager)
+	const t = (await gql(`query($d: String!) { transaction(digest: $d) { ${TX_FIELDS} } }`, { d: f.digest })).transaction
+	const ev = t.effects.events.nodes.map((x) => ({ type: x.contents.type.repr, j: x.contents.json }))
+		.find((x) => x.type.endsWith('::order_info::OrderFilled') && x.j.maker_balance_manager_id === m.balanceManager)
 	if (!ev) { fails.push(`${f.digest}: no OrderFilled with our manager as maker`); continue }
 	const ourBid = ev.j.taker_is_bid === false
 	if ((ourBid ? 'bid' : 'ask') !== f.ourSide) fails.push(`${f.digest}: side`)
-	if (t.transaction.data.sender === m.sender) fails.push(`${f.digest}: the taker is our own sender`)
+	if (t.sender.address === m.sender) fails.push(`${f.digest}: the taker is our own sender`)
 	spreadMist += (ourBid ? -1n : 1n) * BigInt(ev.j.quote_quantity)
 }
 
@@ -90,6 +101,6 @@ for (const [k, [a, b]] of Object.entries(got)) {
 	console.log(`${a === b ? 'ok  ' : 'FAIL'} ${k}: ${a} (manifest ${b})`)
 	if (a !== b) fails.push(k)
 }
-console.log(`${txs.size} wallet transactions in the window; ${m.fills.length} fills read`)
+console.log(`${txs.size} wallet transactions in the window; ${m.fills.length} fills read; source ${GQL}`)
 for (const f of fails) console.log(`FAIL ${f}`)
 process.exit(fails.length ? 1 : 0)

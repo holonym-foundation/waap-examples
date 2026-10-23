@@ -25,7 +25,8 @@ import type { DeepBookClient } from '@mysten/deepbook-v3'
 
 import { addTurnover, evaluateLimits, MIST_PER_SUI, pruneTurnover, rollingTurnover, type Limits } from './lib/budget.ts'
 import { openContext, type Context } from './lib/context.ts'
-import { DEFAULT_CYCLE } from './lib/costs.ts'
+import { strategyFromEnv } from './lib/config.ts'
+import { renderReportCard, reportCard } from './lib/report.ts'
 import { findCreatedBalanceManagerId, parseOrderCanceled, parseOrderPlaced, type RpcTransactionBlock } from './lib/events.ts'
 import { DEFAULT_FILL_SCAN_PAGES, FillLedger, ORDER_FILLED_TYPE, walkFills, type CollectedFill } from './lib/fills.ts'
 import { GAS_CAPS, GasBudgetError, RESERVE_PER_TX_MIST, reconcilePending, runCleanup, sendWithIntent } from './lib/ops.ts'
@@ -33,7 +34,7 @@ import { blocksQuoting, makeClientOrderId } from './lib/pending.ts'
 import { managerSetupTerminal, terminalExitCode } from './lib/manager-setup.ts'
 import { addPlaceOrder } from './lib/ptb.ts'
 import { ownOrderLock, reconcileResting, type ChainOrder } from './lib/quotes.ts'
-import { DEFAULT_STRATEGY, planStrategy, type StrategyConfig } from './lib/strategy.ts'
+import { planStrategy, type StrategyConfig } from './lib/strategy.ts'
 import { StateError, type TrackedOrder } from './lib/state.ts'
 import {
 	AGENT_ID,
@@ -57,8 +58,11 @@ import {
 	makeDeepBookClient,
 	onRpcRotated,
 	poolScalars,
-	queryFillEvents,
-	sui,
+	fillQueryFor,
+	fetchChainTx,
+	DEEPBOOK_INDEXER,
+	LEGACY_RPC_IGNORED,
+	SUI_GRAPHQL,
 	withRpc,
 } from './lib/waap.ts'
 
@@ -96,33 +100,7 @@ const BREAK_STALE_LOCK = process.argv.includes('--break-stale-lock')
 /** Where cleanup sends the withdrawn coins. Defaults to the agent's own wallet. */
 const WITHDRAW_RECIPIENT = process.env.WITHDRAW_RECIPIENT?.trim() || undefined
 
-const STRATEGY: StrategyConfig = {
-	...DEFAULT_STRATEGY,
-	targetBaseFraction: num('TARGET_BASE_FRACTION', DEFAULT_STRATEGY.targetBaseFraction),
-	bandLow: num('BAND_LOW', DEFAULT_STRATEGY.bandLow),
-	bandHigh: num('BAND_HIGH', DEFAULT_STRATEGY.bandHigh),
-	skewMaxBps: num('SKEW_MAX_BPS', DEFAULT_STRATEGY.skewMaxBps),
-	maxOrderSize: num('ORDER_SIZE', DEFAULT_STRATEGY.maxOrderSize),
-	minSpreadBps: num('SPREAD_BPS', DEFAULT_STRATEGY.minSpreadBps),
-	maxSpreadBps: num('MAX_SPREAD_BPS', DEFAULT_STRATEGY.maxSpreadBps),
-	touchMultiple: num('TOUCH_MULTIPLE', DEFAULT_STRATEGY.touchMultiple),
-	holdOnLiquidityPause: flag('HOLD_ON_LIQUIDITY_PAUSE', DEFAULT_STRATEGY.holdOnLiquidityPause),
-	resumeMargin: num('LIQUIDITY_RESUME_MARGIN', DEFAULT_STRATEGY.resumeMargin),
-	minLiquidityPauseMs: num('LIQUIDITY_MIN_PAUSE_MIN', DEFAULT_STRATEGY.minLiquidityPauseMs / 60_000) * 60_000,
-	toleranceBps: num('REQUOTE_TOLERANCE_BPS', DEFAULT_STRATEGY.toleranceBps),
-	minDwellMs: num('MIN_DWELL_SEC', DEFAULT_STRATEGY.minDwellMs / 1000) * 1000,
-	orderTtlMs: num('ORDER_TTL_MIN', DEFAULT_STRATEGY.orderTtlMs / 60_000) * 60_000,
-	refreshBeforeExpiryMs: num('REFRESH_BEFORE_EXPIRY_MIN', DEFAULT_STRATEGY.refreshBeforeExpiryMs / 60_000) * 60_000,
-	staleBookMs: num('STALE_BOOK_SEC', DEFAULT_STRATEGY.staleBookMs / 1000) * 1000,
-	payWithDeep: flag('PAY_WITH_DEEP', DEFAULT_STRATEGY.payWithDeep),
-	deepFeeReserve: num('DEEP_FEE_RESERVE', DEFAULT_STRATEGY.deepFeeReserve),
-	cycle: {
-		...DEFAULT_CYCLE,
-		replacementsPerCycle: num('COST_REPLACEMENTS_PER_CYCLE', DEFAULT_CYCLE.replacementsPerCycle),
-		cyclesToAmortize: num('COST_CYCLES_TO_AMORTIZE', DEFAULT_CYCLE.cyclesToAmortize),
-		quantile: (process.env.COST_QUANTILE as 'median' | 'p90' | 'max') ?? DEFAULT_CYCLE.quantile,
-	},
-}
+const STRATEGY: StrategyConfig = strategyFromEnv()
 
 const LIMITS: Limits = {
 	gas: GAS_CAPS,
@@ -160,6 +138,8 @@ const PRICE_DIVISOR = (SCALARS.floatScalar * SCALARS.quoteScalar) / SCALARS.base
 let ctx: Context
 let runId: string
 let runStartMs = 0
+/** Every tick's mid, for the report card's markouts. Memory only; a few KB per day. */
+const midHistory: Array<{ atMs: number; mid: number }> = []
 /** When the current liquidity pause began; carried between ticks, not persisted (a restart resumes on the plain rule). */
 let liquidityPausedSinceMs: number | undefined
 const fillLedger = new FillLedger()
@@ -245,7 +225,7 @@ async function readInventory(db: GetDb): Promise<{ free: { base: number; quote: 
 async function fetchTx(digest: string): Promise<RpcTransactionBlock | null> {
 	for (let i = 0; i < 6; i++) {
 		try {
-			return (await withRpc('getTransactionBlock', () => sui.getTransactionBlock({ digest, options: { showEvents: true, showObjectChanges: true, showEffects: true } }), { attempts: 2, backoffMs: [1_000, 1_000] })) as unknown as RpcTransactionBlock
+			return await withRpc('getTransaction', () => fetchChainTx(digest), { attempts: 2, backoffMs: [1_000, 1_000] })
 		} catch {
 			await new Promise((r) => setTimeout(r, 1000 * (i + 1)))
 		}
@@ -273,7 +253,7 @@ async function scanFills(tick: number, managerId: string): Promise<'caught_up' |
 			L('warn', 'fill_cursor', { source: 'head', cursor: s.fills.cursor, note: 'no anchor; fills before this point are not covered — `npm run fills` recovers them offline' })
 			if (!s.fills.cursor) return 'failed'
 		}
-		const res = await walkFills({ query: queryFillEvents, cursor: s.fills.cursor, opts: { ...SCALARS, poolId: POOL.address, balanceManagerId: managerId }, ledger: fillLedger, limit: FILL_PAGE_SIZE, maxPages: FILL_SCAN_PAGES })
+		const res = await walkFills({ query: fillQueryFor(managerId), cursor: s.fills.cursor, opts: { ...SCALARS, poolId: POOL.address, balanceManagerId: managerId }, ledger: fillLedger, limit: FILL_PAGE_SIZE, maxPages: FILL_SCAN_PAGES })
 		for (const f of res.fills) {
 			s.fills.ledger.push(f)
 			if (f.role !== 'self') s.budget = addTurnover(s.budget, { atMs: Number(f.timestampMs), notionalQuote: f.quoteQuantity, key: f.key })
@@ -330,6 +310,7 @@ async function tickBody(n: number, managerId: string | undefined, db: GetDb): Pr
 	if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) throw new Error(`empty book for ${POOL_KEY}`)
 	const mid = (bestBid + bestAsk) / 2
 	s.lastMid = mid
+	midHistory.push({ atMs: Date.now(), mid })
 	L('info', 'book_read', { tick: n, bestBid, bestAsk, mid })
 
 	// (2) No manager. Live: create one (persisted intent, like every other send), quote
@@ -595,6 +576,34 @@ async function prepareFills(): Promise<void> {
 	}
 }
 
+/**
+ * The run's report card (lib/report.ts): fills, spread at fill, markouts, P&L against
+ * holding, gas. Logged as one `report_card` event and printed to stderr for a person.
+ */
+function logReportCard(gasQuote: number): void {
+	try {
+		const endMs = Date.now()
+		const fills = ctx.state.fills.ledger
+			.filter((f) => f.role !== 'self' && Number(f.timestampMs) >= runStartMs)
+			.map((f) => ({ atMs: Number(f.timestampMs), isBid: f.isBid, price: f.price, quantity: f.quantity }))
+		const midAt = (ms: number) => {
+			let m: number | undefined
+			for (const h of midHistory) {
+				if (h.atMs > ms) break
+				m = h.mid
+			}
+			return m
+		}
+		const endMid = midHistory.at(-1)?.mid ?? ctx.state.lastMid
+		if (endMid === undefined) return
+		const card = reportCard({ fills, endMid, gasQuote, sends: getSendTxCalls(), midAt, startMs: runStartMs, endMs })
+		L('event', 'report_card', { ...card })
+		process.stderr.write(['', '— run report card —', ...renderReportCard(card), ''].join('\n') + '\n')
+	} catch (err) {
+		L('warn', 'report_card_failed', { error: String(err).slice(0, 200) })
+	}
+}
+
 async function finish(reason: string, exitCode: number): Promise<never> {
 	L('event', 'quotes_stopped', { reason, tick: ctx.state.tick })
 	const managerSetup = managerSetupTerminal({ dryRun: DRY_RUN, balanceManagerId: ctx.state.balanceManagerId, pending: ctx.state.pending })
@@ -609,7 +618,12 @@ async function finish(reason: string, exitCode: number): Promise<never> {
 		cleanupOk = false
 		L('error', 'cleanup_failed', { stage: 'exception', error: String(err).slice(0, 300), instruction: 'run `npm run stop`' })
 	}
-	L('event', 'process_exit', { proc: 'loop', reason, cleanupOk, dryRun: DRY_RUN, ticks: ctx.state.tick, sendTxCalls: getSendTxCalls(), sendTxRefused: getSendTxRefused(), elapsedMs: Date.now() - runStartMs, gasConsumedSui: ctx.state.budget.gasConsumedMist / MIST_PER_SUI, fills: ctx.state.fills.ledger.length })
+	// A confirmed cleanup closes the run: closeRun archives its budget to `closedRuns` and
+	// resets the live one, so report the archived run's gas, not the fresh zero.
+	const closed = ctx.state.closedRuns?.findLast((r) => r.runId === runId)
+	const runBudget = closed?.budget ?? ctx.state.budget
+	logReportCard(runBudget.gasNetMist / MIST_PER_SUI)
+	L('event', 'process_exit', { proc: 'loop', reason, cleanupOk, dryRun: DRY_RUN, ticks: ctx.state.tick, sendTxCalls: getSendTxCalls(), sendTxRefused: getSendTxRefused(), elapsedMs: Date.now() - runStartMs, gasConsumedSui: runBudget.gasConsumedMist / MIST_PER_SUI, gasNetSui: runBudget.gasNetMist / MIST_PER_SUI, runClosed: !!closed, fills: ctx.state.fills.ledger.length })
 	ctx.lock.release()
 	process.exit(cleanupOk ? terminalExitCode(exitCode, managerSetup) : 1)
 }
@@ -626,6 +640,7 @@ async function main(): Promise<void> {
 	runStartMs = s.runStartedAtMs
 	ctx.save()
 
+	if (LEGACY_RPC_IGNORED) L('warn', 'legacy_sui_rpc_ignored', { note: 'SUI_RPC points at a JSON-RPC host; this version reads over gRPC. Set SUI_GRPC instead, or remove SUI_RPC from .env.', using: SUI_RPC })
 	L('event', 'agent_start', {
 		owner: ctx.owner,
 		network: NETWORK,
@@ -637,6 +652,8 @@ async function main(): Promise<void> {
 		rpc: currentRpcUrl(),
 		rpcPrimary: SUI_RPC,
 		rpcEndpoints: RPC_ENDPOINTS,
+		graphql: SUI_GRAPHQL,
+		fillIndexer: DEEPBOOK_INDEXER,
 		dryRun: DRY_RUN,
 		pollMs: POLL_MS,
 		maxTicks: MAX_TICKS ?? null,

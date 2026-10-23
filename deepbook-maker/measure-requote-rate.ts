@@ -37,9 +37,7 @@
 import 'dotenv/config'
 
 import { distanceBps, roundToTick } from './lib/quotes.ts'
-import { POOL, POOL_KEY, poolScalars, queryEventsPage } from './lib/waap.ts'
-import { ORDER_FILLED_TYPE, type EventCursor } from './lib/fills.ts'
-import { priceToHuman } from './lib/events.ts'
+import { DEEPBOOK_INDEXER, POOL_KEY } from './lib/waap.ts'
 
 const WINDOW_HOURS = Number(process.env.WINDOW_HOURS ?? '24')
 const POLLS = (process.env.POLLS ?? '60,300,600').split(',').map(Number)
@@ -52,57 +50,30 @@ const S0_SETTLE_ONLY = 0.0011488
 const S4_TWO_SIDED_REQUOTE = 0.004231376
 
 async function main() {
-	const scalars = poolScalars()
 	const end = Date.now() - 5 * 60_000 // stay behind the head so the window is complete
 	const start = end - WINDOW_HOURS * 3_600_000
 
-	// Anchor with a TimeRange query, then walk under MoveEventType — the two-query
-	// approach forced by the fullnode's lack of composite filters. See lib/fills.ts.
-	const anchor = await queryEventsPage({
-		filter: { TimeRange: { startTime: String(start), endTime: String(start + 120_000) } },
-		limit: 1,
-	})
-	const first = anchor.data?.[0]
-	if (!first?.id) {
-		console.error('no event at the window start; widen WINDOW_HOURS')
-		process.exit(1)
-	}
-	let cursor: EventCursor | null = { txDigest: first.id.txDigest, eventSeq: String(first.id.eventSeq) }
-
+	// The pool's trades come from the DeepBook indexer in 3-hour slices (the public
+	// JSON-RPC event stream this used to walk is retired; see lib/chain.ts).
 	const series: Array<{ ts: number; px: number }> = []
-	let pages = 0
-	let scanned = 0
-	let past = false
 	let partialReason: string | null = null
-	// A walk this long WILL meet a blip: on 2026-09-24 all three endpoints failed together
-	// for about 26 seconds at page ~700. `withRpc` rotates and retries; when even that is
-	// exhausted the walk stops and REPORTS what it has rather than throwing away nine
-	// minutes of work. A partial window is still a measurement, as long as it says so.
-	while (pages < 1200 && !past) {
-		let page
+	for (let t = start; t < end; t += 3 * 3_600_000) {
+		const u = Math.min(end, t + 3 * 3_600_000)
+		const url = `${DEEPBOOK_INDEXER}/trades/${POOL_KEY}?start_time=${Math.floor(t / 1000)}&end_time=${Math.floor(u / 1000)}&limit=10000`
 		try {
-			page = await queryEventsPage({ filter: { MoveEventType: ORDER_FILLED_TYPE }, cursor, limit: 50 })
+			const res = await fetch(url)
+			if (!res.ok) throw new Error(`HTTP ${res.status}`)
+			const trades = (await res.json()) as Array<{ timestamp: number; price: number }>
+			if (trades.length >= 10000) partialReason = `a 3-hour slice hit the 10,000-trade page at ${new Date(t).toISOString()}`
+			for (const x of trades) if (x.timestamp >= start && x.timestamp <= end) series.push({ ts: x.timestamp, px: x.price })
 		} catch (err) {
-			partialReason = `walk stopped at page ${pages}: ${String(err).slice(0, 120)}`
+			partialReason = `indexer read stopped at ${new Date(t).toISOString()}: ${String(err).slice(0, 120)}`
 			console.error(`  ! ${partialReason}`)
 			break
 		}
-		pages++
-		const data = page.data ?? []
-		scanned += data.length
-		for (const e of data) {
-			const ts = Number(e.timestampMs)
-			if (ts > end) {
-				past = true
-				break
-			}
-			const f = e.parsedJson as Record<string, unknown> | undefined
-			if (f && String(f.pool_id) === POOL.address) series.push({ ts, px: priceToHuman(String(f.price), scalars) })
-		}
-		if (!page.hasNextPage) break
-		cursor = page.nextCursor ?? cursor
-		if (pages % 100 === 0) console.error(`  … ${pages} pages, ${series.length} ${POOL_KEY} prints`)
 	}
+	series.sort((x, y) => x.ts - y.ts)
+	const scanned = series.length
 
 	if (series.length < 2) {
 		console.error('not enough prints in the window')
@@ -118,7 +89,7 @@ async function main() {
 		console.log(`The rows below cover ${covered.toFixed(2)} h, not ${WINDOW_HOURS}. Scale the requote counts before using them as a 24 h budget, and say that you did.`)
 		console.log('')
 	}
-	console.log(`pool ${POOL_KEY} ${POOL.address} · ${pages} pages · ${scanned} OrderFilled scanned · ${series.length} prints for this pool`)
+	console.log(`pool ${POOL_KEY} · ${scanned} trades from the DeepBook indexer`)
 	console.log(`price first ${pxs[0].toFixed(5)} last ${pxs.at(-1)!.toFixed(5)} min ${Math.min(...pxs).toFixed(5)} max ${Math.max(...pxs).toFixed(5)} · range ${(((Math.max(...pxs) - Math.min(...pxs)) / Math.min(...pxs)) * 100).toFixed(1)} %`)
 	console.log('')
 	console.log(`Costs applied: settle-only ${S0_SETTLE_ONLY} SUI, two-sided requote ${S4_TWO_SIDED_REQUOTE} SUI (measured).`)

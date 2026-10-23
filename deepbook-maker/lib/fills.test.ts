@@ -145,7 +145,7 @@ test('the walk pages to the head and returns the last cursor', async () => {
 	assert.equal(res.pages, 2)
 	assert.equal(res.scanned, 3)
 	assert.equal(res.truncated, false)
-	assert.deepEqual(res.cursor, { txDigest: 'd3', eventSeq: '0' })
+	assert.deepEqual(res.cursor, { txDigest: 'd3', eventSeq: '0', timestampMs: '3000' })
 })
 
 test('the walk stops at maxPages and reports truncated, keeping the resume cursor', async () => {
@@ -153,7 +153,7 @@ test('the walk stops at maxPages and reports truncated, keeping the resume curso
 	const res = await walkFills({ query, cursor: null, opts: OPTS, maxPages: 2 })
 	assert.equal(res.pages, 2)
 	assert.equal(res.truncated, true, 'a truncated walk has NOT caught up')
-	assert.deepEqual(res.cursor, { txDigest: 'd2', eventSeq: '0' }, 'the next call resumes where this one stopped')
+	assert.deepEqual(res.cursor, { txDigest: 'd2', eventSeq: '0', timestampMs: '2000' }, 'the next call resumes where this one stopped')
 	assert.equal(res.fills.length, 2)
 })
 
@@ -162,7 +162,7 @@ test('the walk stops at endTimeMs and never advances past the boundary', async (
 	const res = await walkFills({ query, cursor: null, opts: OPTS, endTimeMs: 5000 })
 	assert.equal(res.reachedEnd, true)
 	assert.equal(res.fills.length, 2, 'the event after the window is not collected')
-	assert.deepEqual(res.cursor, { txDigest: 'd2', eventSeq: '0' }, 'the cursor stays on the last event inside the window')
+	assert.deepEqual(res.cursor, { txDigest: 'd2', eventSeq: '0', timestampMs: '2000' }, 'the cursor stays on the last event inside the window')
 })
 
 test('a resumed walk continues rather than repeating', async () => {

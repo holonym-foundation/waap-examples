@@ -165,7 +165,7 @@ const cleanupIO = {
 	sendWithIntent,
 	fetchReceipt,
 	sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-	recipientBalance: (owner: string) => sui.getBalance({ owner }).then((b) => Number(b.totalBalance) / MIST_PER_SUI).catch(() => null),
+	recipientBalance: (owner: string) => sui.getBalance({ owner }).then((b) => Number(b.balance.balance) / MIST_PER_SUI).catch(() => null),
 }
 
 /**

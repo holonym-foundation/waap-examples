@@ -11,7 +11,7 @@ Walkthrough: [DeepBook Market Maker recipe](https://docs.waap.human.tech/recipes
 
 Dry run is the default. Nothing is signed unless `AGENT_DRY_RUN` is exactly `0`.
 
-The built-in strategy has not demonstrated profitability; treat it as a starting point for your own. Measured mainnet results, with every digest and a ledger you can re-derive from the chain, are in [`VALIDATION.md`](./VALIDATION.md).
+What this recipe proves is the safe part: an agent that trades on DeepBook without holding a key, inside spending limits, that stops cleanly and whose every SUI can be re-derived from the chain. The built-in maker is an example strategy, not a profitable one: on DEEP/SUI's tight book a 60-second loop gets few fills, and over a week of replay its gas exceeded what it earned. Replace it with your own and test it offline first with `npm run replay`. Measured mainnet results, with every digest and a ledger you can re-derive from the chain, are in [`VALIDATION.md`](./VALIDATION.md).
 
 ## What the built-in maker does
 
@@ -30,7 +30,7 @@ The maker quotes passive, post-only orders around the mid price. It keeps invent
   - failed sends;
   - amortised setup and cleanup.
 
-  If the spread needed is above `MAX_SPREAD_BPS`, or more than `TOUCH_MULTIPLE` × the current touch spread (with our own orders excluded), the maker pauses; it never widens out of reach. A pause for cost cancels everything. A pause caused only by the liquidity rule places nothing new but keeps resting orders that still pass the keep rules (band cap, expiry, price tolerance); a held order can still be filled. Once paused on that rule, the maker resumes placing only after `LIQUIDITY_MIN_PAUSE_MIN` (10) and when its spread is inside the rule by `LIQUIDITY_RESUME_MARGIN` (25 %). In the 28 September live run, without this, 12 of 15 sends were pause/resume flips; the same run replayed offline with it (`lib/fixtures/run-2b-touch-series.json`) sends 8 times, none a flip. This change has not yet run live. The gate is re-checked on the final rounded prices. Passing it means the spread covers the *estimated* cost of one cycle if both legs fill. Actual gas can be higher than the estimate, and the gate does not predict fills; it is not a profit forecast.
+  If the spread needed is above `MAX_SPREAD_BPS`, or more than `TOUCH_MULTIPLE` × the current touch spread (with our own orders excluded), the maker pauses; it never widens out of reach. A pause for cost cancels everything. A pause caused only by the liquidity rule places nothing new but keeps resting orders that still pass the keep rules (band cap, expiry, price tolerance); a held order can still be filled. Once paused on that rule, the maker resumes placing only after `LIQUIDITY_MIN_PAUSE_MIN` (10) and when its spread is inside the rule by `LIQUIDITY_RESUME_MARGIN` (25 %). In the 28 September live run, without this, 12 of 15 sends were pause/resume flips; the same run replayed offline with it (`lib/fixtures/run-2b-touch-series.json`) sends 8 times, none a flip. On 23 October on mainnet the pause held a resting ask on this rule; resuming after a pause has not yet run live. The gate is re-checked on the final rounded prices. Passing it means the spread covers the *estimated* cost of one cycle if both legs fill. Actual gas can be higher than the estimate, and the gate does not predict fills; it is not a profit forecast.
 - **Discretionary replacements.** A drifted order is replaced only after it has passed `REQUOTE_TOLERANCE_BPS` **and** lived `MIN_DWELL_SEC`. Risk overrides the dwell and cancels at once. Risk means a band breach, a size above the cap, an order near expiry, a pause or a halt.
 - **Finite orders.** Orders are `POST_ONLY` (a crossing quote aborts instead of taking), cancel a self-match, and expire after `ORDER_TTL_MIN`. Expiry limits how long a crashed process's orders can trade. It does not withdraw anything; cleanup does that.
 - **Limits.** The loop halts, then cleans up, when it reaches any of these:
@@ -83,9 +83,26 @@ npm ci
 cp .env.example .env                   # nothing secret in it
 npm test                               # unit tests, no network
 MAX_TICKS=3 POLL_MS=10000 ./node_modules/.bin/tsx agent.ts
+npm run replay                         # the strategy on the last 7 days of real trades
 ```
 
 The dry run reads the live book and logs a `quote_plan` or `quote_paused` line each tick, with the cost gate, band and sizes behind it. `.env.example` sets `DRY_RUN_BASE_INVENTORY` / `DRY_RUN_QUOTE_INVENTORY` so a first dry run has something to plan with. Without a waap-cli session it uses the zero address for logging only.
+
+## Practice first: `npm run replay`
+
+`npm run replay` runs the same strategy, with your `.env` settings, tick by tick against the pool's real trades from DeepBook's public indexer (the last 7 days by default; `REPLAY_DAYS`, or `REPLAY_FROM`/`REPLAY_TO`). It needs no account and signs nothing, and it prints the report card a live run prints at stop. It also says when the drawdown or gas limit would have stopped a live run.
+
+How it models what it cannot see (`lib/replay.ts`): no historical order books are public, so the touch is taken from the last taker buy and sell prints; a trade fills you only if it printed strictly through your price (`REPLAY_FILL_AT_PRICE=1` also counts equal prices); your orders are assumed not to change what takers did; gas is a fixed `REPLAY_COST_PER_SEND_SUI` (default 0.0014, the 28 September run's mean per requote). Over the 22 October live run's 30 minutes it predicts zero fills, which is what happened. Use it to compare settings and strategies, not as a forecast.
+
+## The report card
+
+At stop the loop logs a `report_card` event and prints it:
+
+- fills, and DEEP bought and sold;
+- **spread captured at fill**, against the mid just before each fill;
+- **markout after 5 and 30 minutes**, the same against the later mid. Below the spread at fill means the market moved against your fills (adverse selection);
+- **trading P&L against holding** the starting inventory, so DEEP's own price move is not counted as the strategy's;
+- gas, and the result after gas.
 
 ## Going live
 
@@ -133,16 +150,17 @@ The dry run reads the live book and logs a `quote_plan` or `quote_paused` line e
 | `npm run receipts` | Every receipt a log submitted, gas by kind |
 | `npm run grade:smoke` | Grade a bounded live run: `PASS`, `PASS_WITH_DISCLOSED_EXCEPTION` or `FAIL`, plus `utility` (`DEMONSTRATED` needs a real placement and a fill). Rules are in `lib/smoke.ts` |
 | `npm run refuse-probe` | One deliberate deposit above your daily limit, to see the policy engine answer |
-| `npm run measure*` | Gas simulation of transaction shapes; requote-rule replay over a real price series |
+| `npm run replay` | The strategy on the pool's real past trades, offline, with the report card |
+| `npm run measure*` | Gas simulation of transaction shapes (unsigned, over gRPC); requote-rule replay over a real price series |
 
 Every variable, with its default and reason, is in `.env.example`.
 
 ## Known limitations
 
 - **Occasional `InsufficientGas` (waap-cli 2.2.0).** In Standard mode `waap-cli send-tx` takes the transaction kind, and WaaP's preparation step sets the gas budget just above the estimate. When state changes before execution, a requote can fail on chain. In two mainnet runs of the previous version this happened to 4 of 134 and 2 of 11 requotes, at about 0.00018 SUI each; the next tick succeeded. None of the 16 sends in the 28 September run failed this way. The gas budget counts these failures.
-- **Fills are not predicted.** The cost gate says whether a cycle *would* cover its cost. How often DEEP/SUI takers reach a quote at a given distance from the touch is a market fact that no replay of price prints can supply.
+- **Fills are not predicted.** The cost gate says whether a cycle *would* cover its cost. `npm run replay` estimates fills from past trades, but your place in the queue and how takers would have reacted to your orders are not in any public data.
 - **Fees in the input token.** On a fee-bearing pool, non-DEEP maker fees are taken as the order's input asset (quote for a bid, base for an ask). DEEP/SUI is whitelisted at zero fee, so that path is covered only by synthetic tests.
-- **RPC endpoints.** Mysten's public fullnode no longer serves the JSON-RPC methods the SDK uses. The default is publicnode, with suiscan as the fallback.
+- **Read endpoints.** Sui public JSON-RPC is retired, so the agent reads over Mysten's public gRPC (order book, transaction building, balances) and GraphQL (receipts, events), and finds its fills through DeepBook's public indexer, re-reading each one from chain. All three are free and keyless; `SUI_GRPC`, `SUI_GRAPHQL` and `DEEPBOOK_INDEXER` point them elsewhere. If the indexer is down, fills are found late, not lost: the walk resumes from its saved cursor.
 
 ## Main events
 
