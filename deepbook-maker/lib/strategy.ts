@@ -80,7 +80,7 @@ export const DEFAULT_STRATEGY: StrategyConfig = {
 	bandLow: 0.2,
 	bandHigh: 0.8,
 	skewMaxBps: 50,
-	maxOrderSize: 20,
+	maxOrderSize: 100,
 	minSpreadBps: 20,
 	maxSpreadBps: 400,
 	touchMultiple: 4,

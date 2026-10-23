@@ -19,7 +19,7 @@ import { gradeSmoke, type LogLine, type SmokeReceipt } from './lib/smoke.ts'
 import { parseGasUsed } from './lib/receipts.ts'
 import { readResiduals } from './lib/ops.ts'
 import { defaultLockDir, lockKey, lockPathFor } from './lib/lock.ts'
-import { sui, withRpc } from './lib/waap.ts'
+import { fetchChainTx, withRpc } from './lib/waap.ts'
 
 const LOG = process.env.AGENT_LOG_FILE ?? './logs/deepbook-maker.jsonl'
 const HERE = path.dirname(new URL(import.meta.url).pathname)
@@ -48,9 +48,7 @@ function codeSetsGasBudget(): boolean {
 
 async function receiptFor(digest: string): Promise<SmokeReceipt | undefined> {
 	try {
-		const tx = (await withRpc('getTransactionBlock:grade', () =>
-			sui.getTransactionBlock({ digest, options: { showEffects: true, showInput: true } }),
-		)) as unknown as { effects?: unknown; transaction?: { data?: { gasData?: { budget?: string } } } }
+		const tx = await withRpc('getTransaction:grade', () => fetchChainTx(digest))
 		const g = parseGasUsed(tx as never, digest)
 		if (!g) return undefined
 		const budget = tx.transaction?.data?.gasData?.budget

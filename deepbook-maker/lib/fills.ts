@@ -108,7 +108,8 @@ export function fillKey(txDigest: string, eventSeq: string): string {
 }
 
 export function cursorOf(event: QueriedEvent): EventCursor | null {
-	return event.id?.txDigest ? { txDigest: event.id.txDigest, eventSeq: String(event.id.eventSeq) } : null
+	// The time rides along: the fill finder (lib/chain.ts) queries the indexer by time.
+	return event.id?.txDigest ? { txDigest: event.id.txDigest, eventSeq: String(event.id.eventSeq), ...(event.timestampMs ? { timestampMs: String(event.timestampMs) } : {}) } : null
 }
 
 /**

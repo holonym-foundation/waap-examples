@@ -1,11 +1,13 @@
 /**
- * The RPC connection pool is ours, and an endpoint failure replaces it.
+ * The HTTP connection pool is ours, and an endpoint failure replaces it.
  *
  * Live run 2b's four `fetch failed` ticks hit both endpoints while a fresh process
  * reached them. Rotation built new clients over Node's one process-wide pool, so it
  * could not have helped if the pool was the problem. These tests run a real local
- * JSON-RPC server and watch the TCP sockets it sees. undici keeps idle sockets open
- * (4 s by default); a recycle must close them at once, and nothing else does.
+ * server standing in for Sui GraphQL (every receipt read goes there; gRPC and the
+ * DeepBook indexer share the same pool) and watch the TCP sockets it sees. undici keeps
+ * idle sockets open (4 s by default); a recycle must close them at once, and nothing
+ * else does.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -16,6 +18,20 @@ import net from 'node:net'
 
 const open = new Set<net.Socket>()
 let failNext = 0
+const TX = {
+	digest: 'D',
+	sender: { address: '0xabc' },
+	gasInput: { gasBudget: '5000000' },
+	effects: {
+		status: 'SUCCESS',
+		timestamp: '2026-10-22T13:53:22.544Z',
+		checkpoint: { sequenceNumber: 1 },
+		executionError: null,
+		gasEffects: { gasSummary: { computationCost: 131000, storageCost: 94338800, storageRebate: 89055494, nonRefundableStorageFee: 0 } },
+		objectChanges: { nodes: [] },
+		events: { nodes: [] },
+	},
+}
 const server = http.createServer((req, res) => {
 	let body = ''
 	req.on('data', (c) => (body += c))
@@ -25,9 +41,8 @@ const server = http.createServer((req, res) => {
 			req.socket.destroy() // the client sees undici's opaque `fetch failed`
 			return
 		}
-		const { id } = JSON.parse(body)
 		res.setHeader('content-type', 'application/json')
-		res.end(JSON.stringify({ jsonrpc: '2.0', id, result: '750' }))
+		res.end(JSON.stringify({ data: { transaction: TX } }))
 	})
 })
 server.on('connection', (sock) => {
@@ -37,14 +52,14 @@ server.on('connection', (sock) => {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 /** Two concurrent reads leave at least two idle sockets in the pool. */
 async function warmPool(): Promise<Set<net.Socket>> {
-	await Promise.all([waap.sui.getReferenceGasPrice(), waap.sui.getReferenceGasPrice()])
+	await Promise.all([waap.fetchChainTx('D'), waap.fetchChainTx('D')])
 	await wait(50)
 	assert.ok(open.size >= 2, `pool holds ${open.size} sockets`)
 	return new Set(open)
 }
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-process.env.SUI_RPC = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-process.env.SUI_RPC_FALLBACKS = ''
+process.env.SUI_GRAPHQL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/graphql`
+process.env.SUI_GRPC_FALLBACKS = ''
 const waap = await import('./waap.ts')
 test.after(() => server.close())
 
@@ -55,14 +70,14 @@ test('idle pooled sockets stay open on their own, and a recycle closes them', as
 	waap.recycleRpcConnections('test')
 	await wait(200)
 	assert.ok([...before].every((x) => !open.has(x)), 'a pre-recycle socket is still open')
-	assert.equal(await waap.sui.getReferenceGasPrice(), 750n)
+	assert.equal((await waap.fetchChainTx('D')).effects?.gasUsed?.storageRebate, '89055494')
 })
 
 test('withRpc replaces the pool on an endpoint failure; the retry succeeds and no old socket survives', async () => {
 	const before = await warmPool()
 	failNext = 1
-	const out = await waap.withRpc('gas_price', () => waap.sui.getReferenceGasPrice(), { backoffMs: [0, 0, 0] })
-	assert.equal(out, 750n)
+	const out = await waap.withRpc('receipt', () => waap.fetchChainTx('D'), { backoffMs: [0, 0, 0] })
+	assert.equal(out.digest, 'D')
 	await wait(200)
 	assert.ok([...before].every((x) => !open.has(x)), 'an idle socket from before the failure is still pooled')
 })

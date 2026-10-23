@@ -17,14 +17,15 @@
 		"receipts": "tsx receipts.ts",
 		"fills": "tsx collect-fills.ts",
 		"measure:requote": "tsx measure-requote-rate.ts",
-		"grade:smoke": "tsx grade-smoke.ts"
+		"grade:smoke": "tsx grade-smoke.ts",
+		"replay": "tsx replay.ts"
 	},
 	"dependencies": {
 		"@mysten/deepbook-v3": "2.4.1",
 		"@mysten/sui": "2.31.0",
 		"dotenv": "17.2.3",
 		"execa": "9.6.0",
-		"undici": "6.24.1"
+		"undici": "6.29.1"
 	},
 	"devDependencies": {
 		"@types/node": "22.18.1",

@@ -16,13 +16,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { DeepBookClient, FLOAT_SCALAR, mainnetCoins, mainnetPools, testnetCoins, testnetPools } from '@mysten/deepbook-v3'
-import { JsonRpcHTTPTransport, SuiJsonRpcClient } from '@mysten/sui/jsonRpc'
+import { SuiGrpcClient } from '@mysten/sui/grpc'
 import { Transaction } from '@mysten/sui/transactions'
 import { execa } from 'execa'
 import { Agent, fetch as undiciFetch } from 'undici'
 
 import type { PoolScalars } from './events.ts'
-import type { EventCursor, EventPage, QueryEvents } from './fills.ts'
+import { cursorAtTime, getTransaction, indexerFillQuery, ownerTransactions, type ChainTx, type FillCursor } from './chain.ts'
+import type { EventCursor, QueryEvents } from './fills.ts'
 import type { RpcReceipt } from './receipts.ts'
 
 // -----------------------------------------------------------------------------
@@ -33,31 +34,46 @@ export const AGENT_ID = 'deepbook-maker'
 
 export const NETWORK = (process.env.NETWORK ?? 'mainnet') as 'mainnet' | 'testnet'
 
-// `getFullnodeUrl` from '@mysten/sui/client' no longer exists in @mysten/sui 2.31.0,
-// and the Mysten public fullnode has retired JSON-RPC (-32601 "Method not found.
-// JSON-RPC on public fullnodes has been deprecated"). publicnode still serves it.
-// See SDK-NOTES.md. Backup: https://rpc-mainnet.suiscan.xyz.
-const DEFAULT_RPC: Record<string, string> = {
-	mainnet: 'https://sui-rpc.publicnode.com',
-	testnet: 'https://sui-testnet-rpc.publicnode.com', // Mysten's testnet fullnode also returns -32601 (checked 2026-09-14)
+// Reads go over Sui gRPC (DeepBook SDK, transaction building, balances) and Sui
+// GraphQL (receipts, events, an owner's transactions). Public JSON-RPC is retired:
+// see the header of lib/chain.ts for what failed and when. waap-cli signs over the
+// same public gRPC endpoint.
+const DEFAULT_GRPC: Record<string, string> = {
+	mainnet: 'https://fullnode.mainnet.sui.io:443',
+	testnet: 'https://fullnode.testnet.sui.io:443',
 }
-export const SUI_RPC = process.env.SUI_RPC ?? DEFAULT_RPC[NETWORK] ?? DEFAULT_RPC.mainnet
+const DEFAULT_GRAPHQL: Record<string, string> = {
+	mainnet: 'https://graphql.mainnet.sui.io/graphql',
+	testnet: 'https://graphql.testnet.sui.io/graphql',
+}
+const DEFAULT_INDEXER: Record<string, string> = {
+	mainnet: 'https://deepbook-indexer.mainnet.mystenlabs.com',
+	testnet: 'https://deepbook-indexer.testnet.mystenlabs.com',
+}
+/**
+ * `SUI_RPC` is the pre-October JSON-RPC setting. It is still read, but only when it is
+ * a gRPC endpoint: an `.env` copied from an older version that points it at publicnode
+ * must not send gRPC calls to a JSON-RPC host. `SUI_GRPC` wins when both are set.
+ */
+const LEGACY_SUI_RPC = process.env.SUI_RPC?.trim()
+export const LEGACY_RPC_IGNORED = !!LEGACY_SUI_RPC && !process.env.SUI_GRPC?.trim() && !/fullnode\.[a-z]+\.sui\.io/.test(LEGACY_SUI_RPC)
+export const SUI_RPC =
+	process.env.SUI_GRPC?.trim() || (LEGACY_SUI_RPC && !LEGACY_RPC_IGNORED ? LEGACY_SUI_RPC : '') || DEFAULT_GRPC[NETWORK] || DEFAULT_GRPC.mainnet
+export const SUI_GRAPHQL = process.env.SUI_GRAPHQL?.trim() || DEFAULT_GRAPHQL[NETWORK] || DEFAULT_GRAPHQL.mainnet
+export const DEEPBOOK_INDEXER = process.env.DEEPBOOK_INDEXER?.trim() || DEFAULT_INDEXER[NETWORK] || DEFAULT_INDEXER.mainnet
 
 /**
- * Fallback endpoints, tried in order after `SUI_RPC`. A single `fetch failed` from
- * publicnode ended ticks 5 and 6 of the first live run; five in a row exits the
- * process, which would have ended a 24 h run two minutes in.
+ * Fallback gRPC endpoints, tried in order after the primary when one fails in a way
+ * that is the NODE's fault. A single `fetch failed` ended ticks 5 and 6 of the first
+ * live run; five in a row exits the process.
  *
- * `SUI_RPC_FALLBACKS` overrides the list (comma-separated); empty disables rotation.
+ * No default: Mysten's public endpoint is the only free one we have verified (the old
+ * JSON-RPC fallbacks, Suiscan and rpcpool, both went dark). `SUI_GRPC_FALLBACKS`
+ * (comma-separated) adds yours; every read still retries 3 times on the primary alone.
  */
-const DEFAULT_FALLBACKS: Record<string, string[]> = {
-	// `mainnet.sui.rpcpool.com` was dropped 2026-09-27: it answered HTTP 403 to every
-	// call on 25 Sep and ended a mainnet run. Verify any endpoint you add here.
-	mainnet: ['https://rpc-mainnet.suiscan.xyz'],
-	testnet: [],
-}
+const DEFAULT_FALLBACKS: Record<string, string[]> = { mainnet: [], testnet: [] }
 export const RPC_ENDPOINTS: string[] = (() => {
-	const fromEnv = process.env.SUI_RPC_FALLBACKS
+	const fromEnv = process.env.SUI_GRPC_FALLBACKS
 	const fallbacks =
 		fromEnv === undefined
 			? (DEFAULT_FALLBACKS[NETWORK] ?? [])
@@ -65,7 +81,7 @@ export const RPC_ENDPOINTS: string[] = (() => {
 					.split(',')
 					.map((s) => s.trim())
 					.filter(Boolean)
-	// SUI_RPC always leads, and never appears twice — pointing SUI_RPC at a fallback
+	// The primary always leads, and never appears twice — pointing it at a fallback
 	// must not make the rotation try the same dead host twice in a row.
 	return [SUI_RPC, ...fallbacks.filter((u) => u !== SUI_RPC)]
 })()
@@ -321,9 +337,9 @@ export async function resolveOwner(): Promise<string> {
 /**
  * The HTTP connection pool behind every RPC read, and why it is ours.
  *
- * The SDK's transport calls `options.fetch ?? fetch` (`dist/jsonRpc/http-transport.mjs`),
- * and Node's global `fetch` keeps ONE connection pool for the whole process. Rotating to
- * a new `SuiJsonRpcClient` therefore never touched a single socket. Live run 2b
+ * The SDK's transports call `options.fetch ?? fetch`, and Node's global `fetch` keeps ONE
+ * connection pool for the whole process. Rotating to a new client therefore never touched
+ * a single socket. Live run 2b
  * (28 Sep, 15:45–15:50Z): four ticks got `fetch failed` from both endpoints while a fresh
  * Node process on the same Mac reached them — the signature of process-local state. The
  * exact cause was not recorded (the log kept only undici's opaque message; `rpc_retry`
@@ -337,9 +353,18 @@ let rpcAgent = newRpcAgent()
 const rpcFetch = ((input: string | URL | Request, init?: RequestInit) =>
 	undiciFetch(input as Parameters<typeof undiciFetch>[0], { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher: rpcAgent })) as unknown as typeof fetch
 
-function newSuiClient(url: string): SuiJsonRpcClient {
-	return new SuiJsonRpcClient({ transport: new JsonRpcHTTPTransport({ url, fetch: rpcFetch }), network: NETWORK })
+function newSuiClient(url: string): SuiGrpcClient {
+	return new SuiGrpcClient({ baseUrl: url, network: NETWORK, fetch: rpcFetch })
 }
+
+/** JSON over HTTP on the same bounded pool, for GraphQL and the DeepBook indexer. */
+async function httpJson(url: string, init?: RequestInit): Promise<unknown> {
+	const res = await rpcFetch(url, init)
+	if (!res.ok) throw new Error(`HTTP ${res.status} from ${hostOf(url)}`)
+	return res.json()
+}
+const postJson = (url: string, body: unknown) => httpJson(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+const getJson = (url: string) => httpJson(url)
 
 /**
  * The Sui client. `let`, not `const`, because a dead endpoint is rotated away from at
@@ -388,7 +413,7 @@ function hostOf(url: string): string {
 	}
 }
 
-type RotationListener = (client: SuiJsonRpcClient, url: string) => void
+type RotationListener = (client: SuiGrpcClient, url: string) => void
 const rotationListeners = new Set<RotationListener>()
 
 /**
@@ -468,7 +493,9 @@ export function isEndpointFailure(err: unknown): boolean {
 		code === -32601 ||
 		msg.includes('-32601') ||
 		msg.includes('method not found') ||
-		msg.includes('json-rpc on public fullnodes has been deprecated')
+		msg.includes('json-rpc on public fullnodes has been deprecated') ||
+		// gRPC status codes for a node that cannot serve us right now.
+		/\b(unavailable|deadline_exceeded|resource_exhausted)\b/.test(msg)
 	)
 }
 
@@ -567,55 +594,28 @@ export async function buildKindBytes(
 // -----------------------------------------------------------------------------
 
 /**
- * One page of `suix_queryEvents`, through the rotation.
- *
- * Only ONE filter may be passed: this fullnode (and both fallbacks, checked
- * 2026-09-24) rejects `{"All":[…]}` with `-32602 trailing characters` and answers
- * `{"Any":[…]}` with "'Any' queries are not supported by the fullnode". See the header
- * of `lib/fills.ts` for how the run window is bounded without a composite filter.
+ * A transaction by digest, with events, object changes and effects, in the JSON-RPC
+ * shape the rest of the recipe reads. Over Sui GraphQL; see lib/chain.ts.
  */
-export async function queryEventsPage(args: {
-	filter: Record<string, unknown>
-	cursor?: EventCursor | null
-	limit?: number
-	descending?: boolean
-}): Promise<EventPage> {
-	const { filter, cursor = null, limit = 50, descending = false } = args
-	const page = await withRpc('queryEvents', () =>
-		sui.queryEvents({
-			query: filter as never,
-			cursor: cursor as never,
-			limit,
-			order: descending ? 'descending' : 'ascending',
-		}),
-	)
-	return page as unknown as EventPage
+export function fetchChainTx(digest: string): Promise<ChainTx> {
+	return getTransaction(postJson, SUI_GRAPHQL, digest)
 }
 
-/** A `QueryEvents` for `walkFills`, bound to this recipe's RPC and rotation. */
-export const queryFillEvents: QueryEvents = ({ eventType, cursor, limit, descending }) =>
-	queryEventsPage({ filter: { MoveEventType: eventType }, cursor, limit, descending })
+/**
+ * A `QueryEvents` for `walkFills` that finds THIS manager's fills: the DeepBook indexer
+ * names the transactions, GraphQL supplies the events. See lib/chain.ts.
+ */
+export function fillQueryFor(managerId: string): QueryEvents {
+	const q = indexerFillQuery({ get: getJson, post: postJson, indexerUrl: DEEPBOOK_INDEXER, graphqlUrl: SUI_GRAPHQL, poolKey: POOL_KEY, managerId })
+	return (args) => withRpc('fills:indexer', () => q(args))
+}
 
 /**
- * The event cursor at a wall-clock instant.
- *
- * `TimeRange` is the only filter that can find a point in time, and it cannot be
- * combined with `MoveEventType` — but cursors are filter-agnostic, so the cursor this
- * returns resumes a typed walk at the same place in the global event order (verified
- * against mainnet 2026-09-24). Returns null when no event exists in the window, which
- * on a live chain means the window is in the future.
- *
- * The cursor points AT the first event in the window, and a walk resumes AFTER its
- * cursor, so `windowMs` should start slightly before the instant you care about.
+ * The fill cursor at a wall-clock instant. The walk resumes from that time; the indexer
+ * is queried by time, so no event lookup is needed.
  */
-export async function anchorCursorAt(timeMs: number, windowMs = 60_000): Promise<EventCursor | null> {
-	const page = await queryEventsPage({
-		filter: { TimeRange: { startTime: String(Math.floor(timeMs)), endTime: String(Math.floor(timeMs + windowMs)) } },
-		limit: 1,
-		descending: false,
-	})
-	const first = page.data?.[0]
-	return first?.id?.txDigest ? { txDigest: first.id.txDigest, eventSeq: String(first.id.eventSeq) } : null
+export async function anchorCursorAt(timeMs: number, _windowMs = 60_000): Promise<EventCursor | null> {
+	return cursorAtTime(timeMs)
 }
 
 /**
@@ -628,7 +628,7 @@ export async function fetchReceipt(digest: string, attempts = 4): Promise<RpcRec
 		try {
 			const tx = await withRpc(
 				'getTransactionBlock:effects',
-				() => sui.getTransactionBlock({ digest, options: { showEffects: true } }),
+				() => fetchChainTx(digest),
 				{ attempts: 2, backoffMs: [1_000, 1_000] },
 			)
 			return tx as unknown as RpcReceipt
@@ -649,24 +649,17 @@ export async function fetchReceipt(digest: string, attempts = 4): Promise<RpcRec
  * false when the page ran out before reaching `sinceMs`.
  */
 export async function recentOwnerTxs(owner: string, sinceMs: number, limit = 50): Promise<{ txs: Array<{ digest: string; timestampMs: number; clientOrderIds: string[] }>; complete: boolean }> {
-	const page = (await withRpc('queryTransactionBlocks:owner', () =>
-		sui.queryTransactionBlocks({ filter: { FromAddress: owner }, options: { showEvents: true }, order: 'descending', limit }),
-	)) as unknown as { data: Array<{ digest: string; timestampMs?: string; events?: Array<{ type: string; parsedJson?: Record<string, unknown> }> }>; hasNextPage?: boolean }
+	const page = await withRpc('transactions:owner', () => ownerTransactions(postJson, SUI_GRAPHQL, owner, limit))
 	const txs = page.data.map((t) => ({
 		digest: t.digest,
 		timestampMs: Number(t.timestampMs ?? 0),
-		clientOrderIds: (t.events ?? []).filter((e) => e.type.endsWith('::order_info::OrderPlaced')).map((e) => String(e.parsedJson?.client_order_id ?? '')),
+		clientOrderIds: (t.events ?? []).filter((e) => e.type.endsWith('::order_info::OrderPlaced')).map((e) => String((e.parsedJson as Record<string, unknown> | undefined)?.client_order_id ?? '')),
 	}))
 	const oldest = txs.at(-1)?.timestampMs ?? 0
 	return { txs, complete: !page.hasNextPage || oldest < sinceMs }
 }
 
-/**
- * The cursor of the newest event of `eventType` — a start point for a walk that must not
- * begin at the oldest event on chain (what a null cursor with ascending order does).
- */
-export async function headCursor(eventType: string): Promise<EventCursor | null> {
-	const page = await queryEventsPage({ filter: { MoveEventType: eventType }, limit: 1, descending: true })
-	const e = page.data?.[0]
-	return e?.id?.txDigest ? { txDigest: e.id.txDigest, eventSeq: String(e.id.eventSeq) } : null
+/** The fill cursor at "now" — a start point for a walk that must not begin in the past. */
+export async function headCursor(_eventType?: string): Promise<FillCursor | null> {
+	return cursorAtTime(Date.now())
 }

@@ -2,14 +2,14 @@
 
 Every mainnet run of this recipe, with digests, ledgers and the bounded-run grade. The recipe page carries the summary; this file carries the detail.
 
-All runs: Sui mainnet, DEEP/SUI pool, WaaP Standard mode, `@human.tech/waap-cli@2.2.0`, sender `0xc9afaf6e0de1cdf3f830384303f7dbd1bb9c29350f4406ca614811dda61bae8a`, BalanceManager `0xdceb4ba0957e681550518f87b62c12a5bed5d420f1cfadf156cb08be9f2dd2b5`. Digests resolve on [Suiscan](https://suiscan.xyz/mainnet).
+All runs: Sui mainnet, DEEP/SUI pool, WaaP Standard mode, `@human.tech/waap-cli@2.2.0`, sender `0xc9afaf6e0de1cdf3f830384303f7dbd1bb9c29350f4406ca614811dda61bae8a`, BalanceManager `0xdceb4ba0957e681550518f87b62c12a5bed5d420f1cfadf156cb08be9f2dd2b5` in September (October below). Digests resolve on [Suiscan](https://suiscan.xyz/mainnet).
 
 ## Re-derive the 28 September ledger yourself
 
 [`evidence/2026-09-28-run-2.json`](./evidence/2026-09-28-run-2.json) lists every transaction that changed the sender wallet between 14:10 and 16:05 UTC on 28 September, with its gas and wallet balance change, and the two fills. It holds public chain data only.
 
 ```bash
-node evidence/check-ledger.mjs    # Node 20+, no install, read-only RPC
+node evidence/check-ledger.mjs    # Node 20+, no install, read-only Sui GraphQL
 ```
 
 The checker queries the chain for every transaction from or to the sender in that window, fails if the set differs from the manifest, sums gas (computation + storage − rebate) and wallet balance changes from each transaction's effects, reads the two `OrderFilled` events, and compares the totals with the manifest. On 29 September it printed `ok` for all six totals over 19 wallet transactions.
@@ -26,6 +26,36 @@ The earlier runs below are recorded from the saved run logs; their digests resol
 - `utility`, graded separately: `DEMONSTRATED` needs a real placement and at least one fill, otherwise `INCONCLUSIVE`.
 
 The grade covers a run's receipts and end state. It is not an assessment of the strategy.
+
+## October 2026: the partner path and the gRPC/GraphQL read path
+
+Both runs use BalanceManager `0xc41d1ed8f77ae4a6cacc0917b5d6aa666303d96b1603724af85d581e555228ac`, created on 22 October, and default caps (`GAS_CAP_SUI=0.15`, `MAX_DRAWDOWN_SUI=0.05`), with `MAX_RUN_MIN=30`.
+
+### 23 October, 06:01 to 06:32 UTC, `ORDER_SIZE=150`, this code (reads over gRPC, GraphQL and the DeepBook indexer)
+
+- **Deposit:** 250 DEEP + 5 SUI ([`6qZvG9JB…`](https://suiscan.xyz/mainnet/tx/6qZvG9JBxnxmsc5H5kWK3tKd9HUgJTUzznztG7gxGsCA)).
+- **Quote:** placed a bid of 150 at 0.01846 and an ask of 145 at 0.01854 ([`4WFMicEP…`](https://suiscan.xyz/mainnet/tx/4WFMicEPA3onPkoPCfxXH1bQFisHKts5gmdsGW6m54xS)). The ask is short of 150 by the DEEP fee reserve. `orders_confirmed` was read from the GraphQL receipt.
+- **Fill:** at 06:06 an outside taker took the whole bid, 150 DEEP for 2.769 SUI ([`DWh3PBVu…`](https://suiscan.xyz/mainnet/tx/DWh3PBVuUmaGBWn4QasNHEqysoB5DYHq5tCwr9JcQB7H)). The fill scan found it over the DeepBook indexer.
+- **After the fill:** inventory sat at 77% DEEP. A new bid could only be 16 DEEP, and the cost gate wanted about 348 bps on it against a touch of 5 to 22 bps. So the bid side paused on the touch rule.
+  - At 06:06 the agent swept the filled DEEP into the manager ([`6yphTWqe…`](https://suiscan.xyz/mainnet/tx/6yphTWqe5VCVHiMu4oLVras3c5UBvjGvJxnWT2S8QXHh)). It held the ask.
+  - At 06:07 it cancelled the ask, whose skewed target had moved to 0.01873 ([`HZYuwntA…`](https://suiscan.xyz/mainnet/tx/HZYuwntAmxFRXgzDJ2HmB1N98vrPcgCgUDcK7b1f2bwd)).
+  - It quoted nothing more until the 30-minute cap.
+- **Cleanup:** confirmed on chain ([`3R3FDpnA…`](https://suiscan.xyz/mainnet/tx/3R3FDpnAurx9VtNq7uFR8jaK2rRRedQiTGJswGTqe6mK)). Every residual read zero, and the process exited with `cleanupOk: true`.
+- **Report card at stop:** 1 fill; spread at fill +0.0045 SUI; 5-minute markout +0.00375 SUI; P&L vs holding +0.0030 SUI; gas 0.002501403 SUI; result +0.0005 SUI. The fill came 26 minutes before the stop, so no 30-minute markout.
+- **Ledger, re-derived from Sui GraphQL:**
+  - 5 wallet transactions, all `SUCCESS`, with net gas of 0.002501403 SUI. This equals the agent's own `gasNetSui`.
+  - The wallet went from 9.007002185 SUI and 296 DEEP to 6.235500782 SUI and 446 DEEP.
+  - The SUI change is exactly −2.769 for the fill plus −0.002501403 for gas.
+  - The cleanup rebate exceeded the requote gas, so the run's sends net to −0.002067858 SUI. The deposit cost 0.004569261 SUI.
+
+### 22 October, 13:51 to 14:22 UTC, `ORDER_SIZE=100`, commit `0015b7c` (reads over JSON-RPC)
+
+Fresh checkout following the recipe page.
+- **Manager:** created ([`974eoNoH…`](https://suiscan.xyz/mainnet/tx/974eoNoHoQimHYsKiHWPj8WfUtFJAVo8HNwqSZ5NUCDx)).
+- **Deposit:** 200 DEEP + 3.8 SUI ([`HdDwZMNV…`](https://suiscan.xyz/mainnet/tx/HdDwZMNVkPjbSXVsDVUKzoziG6AJEkJhU1qw844n9jDK)).
+- **Quote:** a bid of 100 at 0.01844 and an ask of 100 at 0.01855 ([`3eaGdxdb…`](https://suiscan.xyz/mainnet/tx/3eaGdxdbBH2AB9TgYXYKJSFdBkvDZUNpuFKfG4nHyGAF)). Both rested 30 minutes without a fill.
+- **Cleanup:** confirmed ([`D4kPQ5h3…`](https://suiscan.xyz/mainnet/tx/D4kPQ5h3sC4AX9TVXER6DjsyYy9cfgc4R4Z5GD9oDNX7)).
+- **Net gas:** 0.004806299 SUI, which matches the wallet's SUI change exactly.
 
 ## The revised maker, 28 September 2026
 
@@ -77,7 +107,9 @@ Grade: `FAIL`, utility `DEMONSTRATED`. It quoted for 50.3 minutes, under the rub
 
 Wallet: 3.833048331 SUI and 18 DEEP before, 2.896094463 SUI and 68 DEEP after. That is 50 DEEP bought at 0.01871 (0.9355 SUI) plus 0.001453868 SUI of net gas over four transactions. No sell followed, so there is no realized spread; at the closing mid of 0.01878 the 50 DEEP were worth 0.9390 SUI.
 
-### Changed after these runs, not yet run live
+### Changed after these runs
+
+The October runs above ran code that includes these changes. On 23 October that run covered the liquidity pause holding an order, a deposit into a saved manager, fill scans and cleanup with operations pending. These are tested offline only: resuming after a pause, the larger fill budget on restart, manager-setup recovery, fill-scan retries after a failure, and deposits during an open run.
 
 Commit `522af0a`:
 

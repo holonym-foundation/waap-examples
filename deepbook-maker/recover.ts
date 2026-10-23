@@ -19,7 +19,7 @@
  */
 import { foldReceipt } from './lib/budget.ts'
 import { openContext } from './lib/context.ts'
-import { fatal, log, sui, withRpc } from './lib/waap.ts'
+import { fatal, fetchChainTx, log, withRpc } from './lib/waap.ts'
 
 async function main(): Promise<void> {
 	const [cmd, opId, arg] = process.argv.slice(2)
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
 
 	if (cmd === 'attach') {
 		if (!arg) throw new Error('attach needs a digest')
-		const tx = (await withRpc('getTransactionBlock:recover', () => sui.getTransactionBlock({ digest: arg, options: { showInput: true } }))) as unknown as { timestampMs?: string; transaction?: { data?: { sender?: string } } }
+		const tx = await withRpc('getTransaction:recover', () => fetchChainTx(arg))
 		const sender = tx.transaction?.data?.sender
 		if (sender?.toLowerCase() !== ctx.owner.toLowerCase()) throw new Error(`digest ${arg} was sent by ${sender}, not this account ${ctx.owner}`)
 		if (Number(tx.timestampMs ?? 0) < op.createdAtMs - 5_000) throw new Error(`digest ${arg} is older than the operation's intent`)

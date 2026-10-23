@@ -5,3 +5,4 @@ agent.pid
 logs/
 state.dry.json
 *.tmp
+replay-cache/

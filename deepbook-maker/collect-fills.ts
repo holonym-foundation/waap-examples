@@ -27,7 +27,7 @@ import fs from 'node:fs'
 import { FillLedger, walkFills, type CollectedFill } from './lib/fills.ts'
 import { parseGasUsed, totalGas, type GasReceipt } from './lib/receipts.ts'
 import { realizedSpread } from './lib/spread.ts'
-import { anchorCursorAt, ENV_BALANCE_MANAGER_ID, fetchReceipt, MANAGER_KEY, POOL, POOL_KEY, poolScalars, queryFillEvents, STATE_FILE } from './lib/waap.ts'
+import { anchorCursorAt, ENV_BALANCE_MANAGER_ID, fetchReceipt, MANAGER_KEY, POOL, POOL_KEY, poolScalars, fillQueryFor, STATE_FILE } from './lib/waap.ts'
 import { resolveManager } from './lib/identity.ts'
 import { peekManagerId } from './lib/state.ts'
 
@@ -101,7 +101,7 @@ async function main() {
 	// Loop the walk rather than raising maxPages: each call is bounded, so a long window
 	// makes many small requests instead of one unbounded one, and progress is visible.
 	for (let round = 0; round < 400; round++) {
-		const res = await walkFills({ query: queryFillEvents, cursor: next, opts: { ...poolScalars(), poolId: POOL.address, balanceManagerId: managerId }, ledger, maxPages: 20, endTimeMs: toMs })
+		const res = await walkFills({ query: fillQueryFor(managerId), cursor: next, opts: { ...poolScalars(), poolId: POOL.address, balanceManagerId: managerId }, ledger, maxPages: 20, endTimeMs: toMs })
 		pages += res.pages
 		scanned += res.scanned
 		next = res.cursor
